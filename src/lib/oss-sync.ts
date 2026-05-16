@@ -29,7 +29,6 @@ function ossDateFmt(d: Date): string {
   return `${String(d.getDate()).padStart(2,"0")}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
 }
 
-// FY2026: week 1 starts March 30, 2026
 const FY2026_START = new Date("2026-03-30").getTime();
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -62,23 +61,16 @@ async function ossLogin(): Promise<string> {
   if (!m) {
     const location = res.headers.get("location") ?? "(none)";
     throw new Error(
-      `OSS 登录失败 [HTTP ${res.status}, Location: ${location}, Set-Cookie: ${cookie.substring(0, 120) || "(empty)"}] — 请检查账号密码及服务器网络连通性`
+      `OSS 登录失败 [HTTP ${res.status}, Location: ${location}, Set-Cookie: ${cookie.substring(0, 120) || "(empty)"}]`
     );
   }
   return m[1];
 }
 
 interface RawOrder {
-  id: string;
-  poNumber: string;
-  supplier: string;
-  status: number;
-  poDate: string;
-  deliveryDate: string | null;
-  orderDate: string;
-  weekNo: number;
-  year: number;
-  editPath: string | null;
+  id: string; poNumber: string; supplier: string; status: number;
+  poDate: string; deliveryDate: string | null; orderDate: string;
+  weekNo: number; year: number; editPath: string | null;
 }
 
 function normalizeShortYear(s: string): string {
@@ -94,45 +86,57 @@ function parseNormalOrders(tbody: string, weekNo: number, year: number): RawOrde
     if (!hrefMatch) continue;
     const id = hrefMatch[2];
     const editPath = hrefMatch[1].replace(/^.*?(editorder\/.+)$/, "$1").split("?")[0];
-
     const tdTexts = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)]
       .map(m => m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
     const poNumber = tdTexts[6] ?? "";
     const supplierRaw = tdTexts[2] ?? "";
     const supplier = supplierRaw.replace(/^[A-Z]\s+/, "").trim();
-
     const orderDateRaw = (tdTexts[0] ?? "").match(DATE_RE)?.[1] ?? "";
     const orderDate = orderDateRaw ? normalizeShortYear(orderDateRaw) : "";
-
-    orders.push({
-      id, poNumber, supplier, status: 2,
-      poDate: orderDate,
-      orderDate,
-      deliveryDate: null,
-      weekNo, year,
-      editPath,
-    });
+    orders.push({ id, poNumber, supplier, status: 2, poDate: orderDate, orderDate, deliveryDate: null, weekNo, year, editPath });
   }
   return orders;
 }
 
+interface OSSTemplate {
+  id: string | null; po_number: string | null;
+  display_name: string; supplier_name: string;
+  po_status: string; po_date: string;
+  delivery_date: string | null; order_date: string;
+  week_no: string; year: string;
+}
+
+async function fetchWeekDay(
+  session: string,
+  weekNo: number,
+  year: number,
+  day: Date,
+): Promise<{ templates: OSSTemplate[]; tbody: string }> {
+  const res = await fetch(`${BASE}/shop/home/getTemplates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", "Cookie": `ci_session=${session}` },
+    body: new URLSearchParams({
+      week: String(weekNo), year: String(year), type: "all", last_row: "",
+      dailypo_week_no: String(weekNo), dailypo_year: String(year),
+      dailypo_selected_day: ossDateFmt(day), supplier_id: "0",
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { templates: (data.dailypo_template ?? []) as OSSTemplate[], tbody: data.tbody ?? "" };
+}
+
 interface WeekSyncResult {
-  synced: number;
-  errors: string[];
-  debug: string[];
-  newOrders: string[];
-  todayDeliveries: string[];
-  tomorrowDeliveries: string[];
+  synced: number; errors: string[]; debug: string[];
+  newOrders: string[]; todayDeliveries: string[]; tomorrowDeliveries: string[];
 }
 
 async function syncWeekOrders(
   session: string,
   weekNo: number,
   year: number,
-  _now: Date,
+  now: Date,
+  fetchAllDays: boolean,
 ): Promise<WeekSyncResult> {
-  // Use the Monday of the target week as the selected day, so OSS returns correct daily POs
-  const weekMonday = getWeekMonday(weekNo);
   const errors: string[] = [];
   const debug: string[] = [];
   const newOrders: string[] = [];
@@ -140,55 +144,39 @@ async function syncWeekOrders(
   const tomorrowDeliveries: string[] = [];
   let synced = 0;
 
-  const listRes = await fetch(`${BASE}/shop/home/getTemplates`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Cookie": `ci_session=${session}`,
-    },
-    body: new URLSearchParams({
-      week: String(weekNo),
-      year: String(year),
-      type: "all",
-      last_row: "",
-      dailypo_week_no: String(weekNo),
-      dailypo_year: String(year),
-      dailypo_selected_day: ossDateFmt(weekMonday),
-      supplier_id: "0",
-    }),
-  });
+  const weekMonday = getWeekMonday(weekNo);
+  let mergedTemplates: OSSTemplate[] = [];
+  let tbody = "";
 
-  const listData = await listRes.json().catch(() => ({}));
-
-  interface OSSTemplate {
-    id: string | null;
-    po_number: string | null;
-    display_name: string;
-    supplier_name: string;
-    po_status: string;
-    po_date: string;
-    delivery_date: string | null;
-    order_date: string;
-    week_no: string;
-    year: string;
+  if (fetchAllDays) {
+    // For current & future weeks: fetch all weekdays in parallel to catch every daily PO template
+    const days = Array.from({ length: 7 }, (_, i) => new Date(weekMonday.getTime() + i * 86400000));
+    const results = await Promise.all(days.map(d => fetchWeekDay(session, weekNo, year, d).catch(() => ({ templates: [], tbody: "" }))));
+    const seenIds = new Set<string>();
+    for (const r of results) {
+      for (const t of r.templates) {
+        if (t.id && !seenIds.has(t.id)) { seenIds.add(t.id); mergedTemplates.push(t); }
+      }
+      if (r.tbody && r.tbody.length > tbody.length) tbody = r.tbody;
+    }
+  } else {
+    // Past weeks: single request is enough (submitted orders are in tbody)
+    const r = await fetchWeekDay(session, weekNo, year, weekMonday).catch(() => ({ templates: [], tbody: "" }));
+    mergedTemplates = r.templates.filter(t => t.id !== null);
+    tbody = r.tbody;
   }
 
-  const dailyOrders: RawOrder[] = ((listData.dailypo_template ?? []) as OSSTemplate[])
+  const dailyOrders: RawOrder[] = mergedTemplates
     .filter(o => o.id !== null)
     .map(o => ({
-      id: o.id!,
-      poNumber: o.po_number ?? "",
+      id: o.id!, poNumber: o.po_number ?? "",
       supplier: o.display_name || o.supplier_name,
-      status: parseInt(o.po_status),
-      poDate: o.po_date,
-      deliveryDate: o.delivery_date,
-      orderDate: o.order_date,
-      weekNo: parseInt(o.week_no) || weekNo,
-      year: parseInt(o.year) || year,
+      status: parseInt(o.po_status), poDate: o.po_date,
+      deliveryDate: o.delivery_date, orderDate: o.order_date,
+      weekNo: parseInt(o.week_no) || weekNo, year: parseInt(o.year) || year,
       editPath: null,
     }));
 
-  const tbody: string = listData.tbody ?? "";
   const normalOrders = parseNormalOrders(tbody, weekNo, year);
   const dailyIds = new Set(dailyOrders.map(o => o.id));
   const allOrders = [...dailyOrders, ...normalOrders.filter(o => !dailyIds.has(o.id))];
@@ -199,28 +187,20 @@ async function syncWeekOrders(
     const batch = allOrders.slice(i, i + 5);
     const results = await Promise.allSettled(
       batch.map(async (order) => {
-        const headers = {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Cookie": `ci_session=${session}`,
-        };
+        const headers = { "Content-Type": "application/x-www-form-urlencoded", "Cookie": `ci_session=${session}` };
         const [itemsRes, detailRes] = await Promise.all([
           fetch(`${BASE}/shop/home/getExistingItems`, {
             method: "POST", headers,
             body: new URLSearchParams({ headerid: order.id }),
           }),
           order.deliveryDate === null && order.editPath
-            ? fetch(`${BASE}/shop/${order.editPath}`, { headers: { Cookie: `ci_session=${session}`, Referer: `${BASE}/shop/home`, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" } })
-            : (order.deliveryDate === null && !order.editPath
-                ? (debug.push(`[${order.supplier}] id=${order.id} editPath=null`), Promise.resolve(null))
-                : Promise.resolve(null)),
+            ? fetch(`${BASE}/shop/${order.editPath}`, { headers: { Cookie: `ci_session=${session}`, Referer: `${BASE}/shop/home`, "User-Agent": "Mozilla/5.0" } })
+            : Promise.resolve(null),
         ]);
 
         const text = await itemsRes.text();
         let items: Record<string, string>[] = [];
-        try {
-          const parsed = JSON.parse(text);
-          items = Array.isArray(parsed) ? parsed : [];
-        } catch { items = []; }
+        try { const parsed = JSON.parse(text); items = Array.isArray(parsed) ? parsed : []; } catch { items = []; }
 
         let deliveryDate = order.deliveryDate;
         if (detailRes) {
@@ -233,9 +213,8 @@ async function syncWeekOrders(
           }
           if (dates.length >= 2) deliveryDate = dates[1];
           else if (dates.length === 1) deliveryDate = dates[0];
-          debug.push(`[${order.supplier}] week=${weekNo} url=/shop/${order.editPath} dates=${JSON.stringify(dates)} → deliveryDate=${deliveryDate ?? "null"}`);
+          debug.push(`[${order.supplier}] week=${weekNo} → deliveryDate=${deliveryDate ?? "null"}`);
         }
-
         return { order: { ...order, deliveryDate }, items };
       })
     );
@@ -247,40 +226,17 @@ async function syncWeekOrders(
         const isNew = !(await prisma.sushiOrder.findUnique({ where: { ossId: order.id }, select: { id: true } }));
         const dbOrder = await prisma.sushiOrder.upsert({
           where: { ossId: order.id },
-          update: {
-            poNumber: order.poNumber,
-            supplierName: order.supplier,
-            status: order.status,
-            poDate: order.poDate || null,
-            deliveryDate: order.deliveryDate,
-            orderDate: order.orderDate || null,
-            weekNo: order.weekNo,
-            year: order.year,
-            syncedAt: new Date(),
-          },
-          create: {
-            ossId: order.id,
-            poNumber: order.poNumber,
-            supplierName: order.supplier,
-            status: order.status,
-            poDate: order.poDate || null,
-            deliveryDate: order.deliveryDate,
-            orderDate: order.orderDate || null,
-            weekNo: order.weekNo,
-            year: order.year,
-          },
+          update: { poNumber: order.poNumber, supplierName: order.supplier, status: order.status, poDate: order.poDate || null, deliveryDate: order.deliveryDate, orderDate: order.orderDate || null, weekNo: order.weekNo, year: order.year, syncedAt: new Date() },
+          create: { ossId: order.id, poNumber: order.poNumber, supplierName: order.supplier, status: order.status, poDate: order.poDate || null, deliveryDate: order.deliveryDate, orderDate: order.orderDate || null, weekNo: order.weekNo, year: order.year },
         });
         if (isNew && items.length > 0) newOrders.push(order.supplier);
         await prisma.sushiOrderItem.deleteMany({ where: { orderId: dbOrder.id } });
         if (items.length > 0) {
           await prisma.sushiOrderItem.createMany({
             data: items.map(item => ({
-              orderId: dbOrder.id,
-              ossItemId: String(item.id ?? ""),
-              itemCode: item.item_code ?? "",
-              itemName: item.item_name ?? item.supplier_item_name ?? "",
-              uom: item.uom_name ?? "",
-              quantity: parseFloat(item.qty ?? "0"),
+              orderId: dbOrder.id, ossItemId: String(item.id ?? ""),
+              itemCode: item.item_code ?? "", itemName: item.item_name ?? item.supplier_item_name ?? "",
+              uom: item.uom_name ?? "", quantity: parseFloat(item.qty ?? "0"),
             })),
           });
         }
@@ -296,9 +252,7 @@ async function syncWeekOrders(
           }
         }
         synced++;
-      } catch (e) {
-        errors.push(`Order ${order.id}: ${String(e)}`);
-      }
+      } catch (e) { errors.push(`Order ${order.id}: ${String(e)}`); }
     }
   }
 
@@ -311,11 +265,11 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
   const currentWeekNo = getFiscalWeek(now);
   const year = now.getFullYear();
 
-  // Sync from week 1 of this FY to 4 weeks ahead to cover all active orders
-  const weekRange: Array<{ weekNo: number; year: number }> = [];
-  for (let wn = 1; wn <= currentWeekNo + 4; wn++) {
-    weekRange.push({ weekNo: wn, year });
-  }
+  // First sync: fetch all weeks from week 1 (slow, but only once).
+  // Subsequent syncs: only current-1 through current+4 (fast incremental).
+  const hasHistory = (await prisma.sushiOrder.count()) > 0;
+  const startWeek = hasHistory ? Math.max(1, currentWeekNo - 1) : 1;
+  const endWeek = currentWeekNo + 4;
 
   const allErrors: string[] = [];
   const allDebug: string[] = [];
@@ -324,40 +278,31 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
   const allTomorrowDeliveries: string[] = [];
   let totalSynced = 0;
 
-  for (const { weekNo, year: wy } of weekRange) {
+  for (let wn = startWeek; wn <= endWeek; wn++) {
     try {
-      const result = await syncWeekOrders(session, weekNo, wy, now);
+      // Fetch all days only for current week and future (to get pending daily PO templates)
+      const fetchAllDays = wn >= currentWeekNo;
+      const result = await syncWeekOrders(session, wn, year, now, fetchAllDays);
       totalSynced += result.synced;
       allErrors.push(...result.errors);
       allDebug.push(...result.debug);
       allNewOrders.push(...result.newOrders);
       allTodayDeliveries.push(...result.todayDeliveries);
       allTomorrowDeliveries.push(...result.tomorrowDeliveries);
-    } catch (e) {
-      allErrors.push(`Week ${weekNo}: ${String(e)}`);
-    }
+    } catch (e) { allErrors.push(`Week ${wn}: ${String(e)}`); }
   }
 
   if (allNewOrders.length > 0) {
     const unique = [...new Set(allNewOrders)];
-    await wxNotify(
-      `🛒 寿司系统：${unique.length} 个新采购订单`,
-      unique.map(s => `- ${s}`).join("\n"),
-    );
+    await wxNotify(`🛒 寿司系统：${unique.length} 个新采购订单`, unique.map(s => `- ${s}`).join("\n"));
   }
   if (allTodayDeliveries.length > 0) {
     const unique = [...new Set(allTodayDeliveries)];
-    await wxNotify(
-      `📦 寿司系统：今日 ${unique.length} 笔订单到货`,
-      unique.map(s => `- ${s}`).join("\n"),
-    );
+    await wxNotify(`📦 寿司系统：今日 ${unique.length} 笔订单到货`, unique.map(s => `- ${s}`).join("\n"));
   }
   if (allTomorrowDeliveries.length > 0) {
     const unique = [...new Set(allTomorrowDeliveries)];
-    await wxNotify(
-      `🚚 寿司系统：明日 ${unique.length} 笔订单到货提醒`,
-      unique.map(s => `- ${s}`).join("\n"),
-    );
+    await wxNotify(`🚚 寿司系统：明日 ${unique.length} 笔订单到货提醒`, unique.map(s => `- ${s}`).join("\n"));
   }
 
   return { synced: totalSynced, errors: allErrors, debug: allDebug };
