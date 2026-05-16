@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Boxes, Minus } from "lucide-react";
 import { format } from "date-fns";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface Item {
   id: string; name: string; quantity: number; unit: string; notes: string | null; updatedAt: string;
@@ -23,6 +24,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 export default function SushiInventoryPage() {
+  const { t } = useLanguage();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -80,7 +82,7 @@ export default function SushiInventoryPage() {
   }
 
   async function handleDelete(item: Item) {
-    if (!confirm(`确认删除「${item.name}」？`)) return;
+    if (!confirm(t("inventory.confirmDelete", { name: item.name }))) return;
     await fetch(`/api/sushi/inventory/${item.id}`, { method: "DELETE" });
     load();
   }
@@ -89,33 +91,33 @@ export default function SushiInventoryPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">寿司店库存统计</h1>
-          <p className="text-slate-500 text-sm mt-0.5">手动记录店内物品库存数量</p>
+          <h1 className="text-2xl font-bold text-slate-800">{t("inventory.title")}</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{t("inventory.subtitle")}</p>
         </div>
         <button onClick={openAdd}
           className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          <Plus size={16} /> 添加物品
+          <Plus size={16} /> {t("inventory.addBtn")}
         </button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-100">
         {loading ? (
-          <div className="p-12 text-center text-slate-400">加载中...</div>
+          <div className="p-12 text-center text-slate-400">{t("common.loading")}</div>
         ) : items.length === 0 ? (
           <div className="p-12 text-center">
             <Boxes size={40} className="mx-auto text-slate-300 mb-3" />
-            <p className="text-slate-400">暂无记录，点击右上角添加物品</p>
+            <p className="text-slate-400">{t("inventory.noRecord")}</p>
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 text-xs">
-                <th className="text-left px-6 py-3 font-medium">物品名称</th>
-                <th className="text-center px-4 py-3 font-medium">数量</th>
-                <th className="text-center px-4 py-3 font-medium">单位</th>
-                <th className="text-left px-4 py-3 font-medium">备注</th>
-                <th className="text-right px-4 py-3 font-medium">更新时间</th>
-                <th className="text-center px-4 py-3 font-medium">操作</th>
+                <th className="text-left px-6 py-3 font-medium">{t("inventory.col.name")}</th>
+                <th className="text-center px-4 py-3 font-medium">{t("inventory.col.qty")}</th>
+                <th className="text-center px-4 py-3 font-medium">{t("inventory.col.unit")}</th>
+                <th className="text-left px-4 py-3 font-medium">{t("inventory.col.notes")}</th>
+                <th className="text-right px-4 py-3 font-medium">{t("inventory.col.updatedAt")}</th>
+                <th className="text-center px-4 py-3 font-medium">{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -124,21 +126,15 @@ export default function SushiInventoryPage() {
                   <td className="px-6 py-3.5 font-medium text-slate-800">{item.name}</td>
                   <td className="px-4 py-3.5">
                     <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => handleAdjust(item.id, -1)}
-                        disabled={adjusting === item.id}
-                        className="w-6 h-6 flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-40 transition-colors"
-                      >
+                      <button onClick={() => handleAdjust(item.id, -1)} disabled={adjusting === item.id}
+                        className="w-6 h-6 flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-40 transition-colors">
                         <Minus size={12} />
                       </button>
                       <span className="w-12 text-center font-semibold text-slate-800 tabular-nums">
                         {item.quantity % 1 === 0 ? item.quantity : item.quantity.toFixed(1)}
                       </span>
-                      <button
-                        onClick={() => handleAdjust(item.id, 1)}
-                        disabled={adjusting === item.id}
-                        className="w-6 h-6 flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-40 transition-colors"
-                      >
+                      <button onClick={() => handleAdjust(item.id, 1)} disabled={adjusting === item.id}
+                        className="w-6 h-6 flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-40 transition-colors">
                         <Plus size={12} />
                       </button>
                     </div>
@@ -166,35 +162,43 @@ export default function SushiInventoryPage() {
       </div>
 
       {showModal && (
-        <Modal title={editing ? `编辑 — ${editing.name}` : "添加物品"} onClose={() => setShowModal(false)}>
+        <Modal
+          title={editing ? t("inventory.modal.edit", { name: editing.name }) : t("inventory.modal.add")}
+          onClose={() => setShowModal(false)}
+        >
           <form onSubmit={handleSave} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">物品名称 *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t("inventory.form.name")}</label>
               <input className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="例：酱油" />
+                value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required
+                placeholder={t("inventory.form.namePlaceholder")} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">数量 *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t("inventory.form.qty")}</label>
                 <input type="number" step="0.1" min="0"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                   value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">单位</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t("inventory.form.unit")}</label>
                 <input className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="瓶/袋/盒" />
+                  value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                  placeholder={t("inventory.form.unitPlaceholder")} />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">备注</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t("inventory.form.notes")}</label>
               <input className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="可选" />
+                value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder={t("common.optional")} />
             </div>
             <div className="flex gap-3 pt-1">
-              <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">取消</button>
-              <button type="submit" disabled={saving} className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white rounded-lg text-sm font-medium">
-                {saving ? "保存中..." : "保存"}
+              <button type="button" onClick={() => setShowModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">{t("common.cancel")}</button>
+              <button type="submit" disabled={saving}
+                className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white rounded-lg text-sm font-medium">
+                {saving ? t("common.saving") : t("common.save")}
               </button>
             </div>
           </form>
