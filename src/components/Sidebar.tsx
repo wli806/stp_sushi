@@ -11,6 +11,7 @@ import {
   LogOut,
   UtensilsCrossed,
   Boxes,
+  CalendarClock,
   ChevronDown,
   Menu,
   X,
@@ -31,8 +32,9 @@ const navItems: NavItem[] = [
   {
     href: "/sushi", labelKey: "sidebar.purchasing", icon: UtensilsCrossed, roles: ["OWNER", "MANAGER", "VIEWER"],
     children: [
-      { href: "/sushi/orders",    labelKey: "sidebar.orders",    icon: ClipboardList },
-      { href: "/sushi/inventory", labelKey: "sidebar.inventory", icon: Boxes },
+      { href: "/sushi/orders",      labelKey: "sidebar.orders",      icon: ClipboardList },
+      { href: "/sushi/po-calendar", labelKey: "sidebar.poCalendar",  icon: CalendarClock },
+      { href: "/sushi/inventory",   labelKey: "sidebar.inventory",   icon: Boxes },
     ],
   },
   { href: "/settings", labelKey: "sidebar.users", icon: Settings, roles: ["OWNER"], rootOnly: true },

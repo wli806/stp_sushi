@@ -19,6 +19,7 @@ const translations = {
     "sidebar.title": "寿司管理系统",
     "sidebar.purchasing": "寿司采购",
     "sidebar.orders": "订单管理",
+    "sidebar.poCalendar": "订单日期管理",
     "sidebar.inventory": "库存统计",
     "sidebar.users": "用户管理",
     "sidebar.account": "登录账户",
@@ -82,6 +83,19 @@ const translations = {
     "orders.tooltipOrder": "下单日: {dates}",
     "orders.tooltipNoDelivery": "暂无配送日期",
     "orders.tooltipNoOrder": "暂无下单日期",
+
+    // 订单日期管理
+    "pocal.title": "订单日期管理",
+    "pocal.subtitle": "PO 截止时间总览，点击事件跳转至 OSS 下单",
+    "pocal.pending": "待下单",
+    "pocal.ordered": "已下单",
+    "pocal.deadline": "截止",
+    "pocal.noData": "本月暂无 PO 截止日期",
+    "pocal.openOSS": "在 OSS 中下单",
+    "pocal.legend.pending": "待下单（点击跳转 OSS）",
+    "pocal.legend.ordered": "已下单",
+    "pocal.upcoming": "即将到期",
+    "pocal.overdue": "已过期未下单",
 
     // 库存页
     "inventory.title": "寿司店库存统计",
@@ -208,6 +222,19 @@ const translations = {
     "orders.tooltipOrder": "Order date: {dates}",
     "orders.tooltipNoDelivery": "No delivery date",
     "orders.tooltipNoOrder": "No order date",
+
+    // PO Calendar
+    "pocal.title": "Order Date Manager",
+    "pocal.subtitle": "PO deadlines at a glance — click to open OSS",
+    "pocal.pending": "Pending",
+    "pocal.ordered": "Ordered",
+    "pocal.deadline": "Due",
+    "pocal.noData": "No PO deadlines this month",
+    "pocal.openOSS": "Order in OSS",
+    "pocal.legend.pending": "Pending (click to open OSS)",
+    "pocal.legend.ordered": "Ordered",
+    "pocal.upcoming": "Upcoming",
+    "pocal.overdue": "Overdue",
 
     // Inventory
     "inventory.title": "Sushi Inventory",

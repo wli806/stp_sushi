@@ -17,7 +17,7 @@ function getWeekMonday(weekNo: number): Date {
 export async function GET(request: NextRequest) {
   try {
     await requireRoot();
-    const weekNo = parseInt(request.nextUrl.searchParams.get("week") ?? "8");
+    const weekNo = parseInt(request.nextUrl.searchParams.get("week") ?? "7");
     const year = parseInt(request.nextUrl.searchParams.get("year") ?? "2026");
 
     const username = process.env.OSS_USERNAME ?? "";

@@ -92,17 +92,21 @@ function parseNormalOrders(tbody: string, weekNo: number, year: number): RawOrde
     const supplierRaw = tdTexts[2] ?? "";
     const supplier = supplierRaw.replace(/^[A-Z]\s+/, "").trim();
 
-    // td[0] has order date for submitted orders; td[1] has the deadline for pending ones
-    const dateCandidate0 = (tdTexts[0] ?? "").match(DATE_RE)?.[1] ?? "";
-    const dateCandidate1 = (tdTexts[1] ?? "").match(DATE_RE)?.[1] ?? "";
-    const orderDateRaw = dateCandidate0 || dateCandidate1;
-    const orderDate = orderDateRaw ? normalizeShortYear(orderDateRaw) : "";
-
     // Detect pending status: row contains o-i-circle with "O" (Open/not yet submitted)
     const isPending = /o-i-circle[^>]*>\s*O\s*</i.test(row);
     const status = isPending ? 1 : 2;
 
-    orders.push({ id, poNumber, supplier, status, poDate: orderDate, orderDate, deliveryDate: null, weekNo, year, editPath });
+    // td[0] has order date for submitted; td[1] has the full deadline string for pending
+    const dateCandidate0 = (tdTexts[0] ?? "").match(DATE_RE)?.[1] ?? "";
+    const deadlineStr = tdTexts[1] ?? "";  // e.g. "Tuesday 19-May-26 11:59 pm"
+    const dateCandidate1 = deadlineStr.match(DATE_RE)?.[1] ?? "";
+    const orderDateRaw = dateCandidate0 || dateCandidate1;
+    const orderDate = orderDateRaw ? normalizeShortYear(orderDateRaw) : "";
+
+    // For pending orders: store full deadline string in poDate (shown as cutoff time in UI)
+    const poDate = isPending ? deadlineStr : orderDate;
+
+    orders.push({ id, poNumber, supplier, status, poDate, orderDate, deliveryDate: null, weekNo, year, editPath });
   }
   return orders;
 }
