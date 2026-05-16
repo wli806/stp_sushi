@@ -111,11 +111,11 @@ function parseNormalOrders(tbody: string, weekNo: number, year: number): RawOrde
   return orders;
 }
 
-export async function syncOSSOrders(): Promise<{ synced: number; errors: string[]; debug: string[] }> {
+export async function syncOSSOrders(targetWeekNo?: number, targetYear?: number): Promise<{ synced: number; errors: string[]; debug: string[] }> {
   const session = await ossLogin();
   const now = new Date();
-  const weekNo = getFiscalWeek(now);
-  const year = now.getFullYear();
+  const weekNo = targetWeekNo ?? getFiscalWeek(now);
+  const year = targetYear ?? now.getFullYear();
 
   const listRes = await fetch(`${BASE}/shop/home/getTemplates`, {
     method: "POST",
