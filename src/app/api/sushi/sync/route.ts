@@ -9,8 +9,8 @@ export async function POST(request: NextRequest) {
     if (!cronSecret || reqSecret !== cronSecret) {
       await requireRoot();
     }
-    const body = await request.json().catch(() => ({}));
-    const result = await syncOSSOrders(body.weekNo, body.year);
+    await request.json().catch(() => ({}));
+    const result = await syncOSSOrders();
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

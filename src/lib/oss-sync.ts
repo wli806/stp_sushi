@@ -13,7 +13,6 @@ function parseDeliveryDate(s: string): string | null {
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
   const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,"0")}-${dmy[1].padStart(2,"0")}`;
-  // 支持两位或四位年份: "14-May-26" 或 "14-May-2026"
   const dm = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})/);
   if (dm) {
     const m = MONTH_ABBR[dm[2].toLowerCase()];
@@ -23,6 +22,7 @@ function parseDeliveryDate(s: string): string | null {
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
+
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function ossDateFmt(d: Date): string {
@@ -111,11 +111,27 @@ function parseNormalOrders(tbody: string, weekNo: number, year: number): RawOrde
   return orders;
 }
 
-export async function syncOSSOrders(targetWeekNo?: number, targetYear?: number): Promise<{ synced: number; errors: string[]; debug: string[] }> {
-  const session = await ossLogin();
-  const now = new Date();
-  const weekNo = targetWeekNo ?? getFiscalWeek(now);
-  const year = targetYear ?? now.getFullYear();
+interface WeekSyncResult {
+  synced: number;
+  errors: string[];
+  debug: string[];
+  newOrders: string[];
+  todayDeliveries: string[];
+  tomorrowDeliveries: string[];
+}
+
+async function syncWeekOrders(
+  session: string,
+  weekNo: number,
+  year: number,
+  now: Date,
+): Promise<WeekSyncResult> {
+  const errors: string[] = [];
+  const debug: string[] = [];
+  const newOrders: string[] = [];
+  const todayDeliveries: string[] = [];
+  const tomorrowDeliveries: string[] = [];
+  let synced = 0;
 
   const listRes = await fetch(`${BASE}/shop/home/getTemplates`, {
     method: "POST",
@@ -135,7 +151,7 @@ export async function syncOSSOrders(targetWeekNo?: number, targetYear?: number):
     }),
   });
 
-  const listData = await listRes.json();
+  const listData = await listRes.json().catch(() => ({}));
 
   interface OSSTemplate {
     id: string | null;
@@ -160,8 +176,8 @@ export async function syncOSSOrders(targetWeekNo?: number, targetYear?: number):
       poDate: o.po_date,
       deliveryDate: o.delivery_date,
       orderDate: o.order_date,
-      weekNo: parseInt(o.week_no),
-      year: parseInt(o.year),
+      weekNo: parseInt(o.week_no) || weekNo,
+      year: parseInt(o.year) || year,
       editPath: null,
     }));
 
@@ -170,12 +186,7 @@ export async function syncOSSOrders(targetWeekNo?: number, targetYear?: number):
   const dailyIds = new Set(dailyOrders.map(o => o.id));
   const allOrders = [...dailyOrders, ...normalOrders.filter(o => !dailyIds.has(o.id))];
 
-  const errors: string[] = [];
-  const debug: string[] = [];
-  let synced = 0;
-  const newOrders: string[] = [];
-  const todayDeliveries: string[] = [];
-  const tomorrowDeliveries: string[] = [];
+  if (allOrders.length === 0) return { synced, errors, debug, newOrders, todayDeliveries, tomorrowDeliveries };
 
   for (let i = 0; i < allOrders.length; i += 5) {
     const batch = allOrders.slice(i, i + 5);
@@ -193,7 +204,7 @@ export async function syncOSSOrders(targetWeekNo?: number, targetYear?: number):
           order.deliveryDate === null && order.editPath
             ? fetch(`${BASE}/shop/${order.editPath}`, { headers: { Cookie: `ci_session=${session}`, Referer: `${BASE}/shop/home`, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" } })
             : (order.deliveryDate === null && !order.editPath
-                ? (debug.push(`[${order.supplier}] id=${order.id} editPath=null (href regex missed)`), Promise.resolve(null))
+                ? (debug.push(`[${order.supplier}] id=${order.id} editPath=null`), Promise.resolve(null))
                 : Promise.resolve(null)),
         ]);
 
@@ -215,7 +226,7 @@ export async function syncOSSOrders(targetWeekNo?: number, targetYear?: number):
           }
           if (dates.length >= 2) deliveryDate = dates[1];
           else if (dates.length === 1) deliveryDate = dates[0];
-          debug.push(`[${order.supplier}] url=/shop/${order.editPath} status=${detailRes.status} htmlLen=${html.length} dates=${JSON.stringify(dates)} → deliveryDate=${deliveryDate ?? "null"}`);
+          debug.push(`[${order.supplier}] week=${weekNo} url=/shop/${order.editPath} dates=${JSON.stringify(dates)} → deliveryDate=${deliveryDate ?? "null"}`);
         }
 
         return { order: { ...order, deliveryDate }, items };
@@ -284,27 +295,65 @@ export async function syncOSSOrders(targetWeekNo?: number, targetYear?: number):
     }
   }
 
-  if (newOrders.length > 0) {
-    const unique = [...new Set(newOrders)];
+  return { synced, errors, debug, newOrders, todayDeliveries, tomorrowDeliveries };
+}
+
+export async function syncOSSOrders(): Promise<{ synced: number; errors: string[]; debug: string[] }> {
+  const session = await ossLogin();
+  const now = new Date();
+  const currentWeekNo = getFiscalWeek(now);
+  const year = now.getFullYear();
+
+  // Sync from 8 weeks ago to 3 weeks ahead to cover all active orders
+  const weekRange: Array<{ weekNo: number; year: number }> = [];
+  for (let offset = -8; offset <= 3; offset++) {
+    const wn = currentWeekNo + offset;
+    if (wn < 1) continue;
+    weekRange.push({ weekNo: wn, year });
+  }
+
+  const allErrors: string[] = [];
+  const allDebug: string[] = [];
+  const allNewOrders: string[] = [];
+  const allTodayDeliveries: string[] = [];
+  const allTomorrowDeliveries: string[] = [];
+  let totalSynced = 0;
+
+  for (const { weekNo, year: wy } of weekRange) {
+    try {
+      const result = await syncWeekOrders(session, weekNo, wy, now);
+      totalSynced += result.synced;
+      allErrors.push(...result.errors);
+      allDebug.push(...result.debug);
+      allNewOrders.push(...result.newOrders);
+      allTodayDeliveries.push(...result.todayDeliveries);
+      allTomorrowDeliveries.push(...result.tomorrowDeliveries);
+    } catch (e) {
+      allErrors.push(`Week ${weekNo}: ${String(e)}`);
+    }
+  }
+
+  if (allNewOrders.length > 0) {
+    const unique = [...new Set(allNewOrders)];
     await wxNotify(
       `🛒 寿司系统：${unique.length} 个新采购订单`,
       unique.map(s => `- ${s}`).join("\n"),
     );
   }
-  if (todayDeliveries.length > 0) {
-    const unique = [...new Set(todayDeliveries)];
+  if (allTodayDeliveries.length > 0) {
+    const unique = [...new Set(allTodayDeliveries)];
     await wxNotify(
       `📦 寿司系统：今日 ${unique.length} 笔订单到货`,
       unique.map(s => `- ${s}`).join("\n"),
     );
   }
-  if (tomorrowDeliveries.length > 0) {
-    const unique = [...new Set(tomorrowDeliveries)];
+  if (allTomorrowDeliveries.length > 0) {
+    const unique = [...new Set(allTomorrowDeliveries)];
     await wxNotify(
       `🚚 寿司系统：明日 ${unique.length} 笔订单到货提醒`,
       unique.map(s => `- ${s}`).join("\n"),
     );
   }
 
-  return { synced, errors, debug };
+  return { synced: totalSynced, errors: allErrors, debug: allDebug };
 }

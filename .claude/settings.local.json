@@ -8,7 +8,9 @@
       "Bash(Get-ChildItem -Path \"d:\\\\0-develop\\\\1-code\\\\Tommy_web_proj\" -Filter \"prisma.config*\" -Recurse)",
       "PowerShell(cd \"d:\\\\0-develop\\\\1-code\\\\stp_sushi\"; git add src/app/\\(dashboard\\)/sushi/orders/page.tsx src/app/api/sushi/orders/route.ts src/app/api/sushi/sync/route.ts src/lib/oss-sync.ts; git commit -m \"feat: 支持按周选择同步订单，区分已下单/待下单\")",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

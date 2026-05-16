@@ -25,30 +25,6 @@ const MONTH_ABBR: Record<string, string> = {
   jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12",
 };
 
-const FY2026_START = new Date("2026-03-30").getTime();
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
-function getFiscalWeekNo(date: Date): number {
-  return Math.max(1, Math.floor((date.getTime() - FY2026_START) / WEEK_MS) + 1);
-}
-function getWeekStartDate(weekNo: number): Date {
-  return new Date(FY2026_START + (weekNo - 1) * WEEK_MS);
-}
-function fmtShortDate(d: Date): string {
-  const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${d.getDate()}-${m[d.getMonth()]}-${d.getFullYear()}`;
-}
-function buildWeekOptions(currentWeekNo: number) {
-  const options = [];
-  for (let i = currentWeekNo - 6; i <= currentWeekNo + 1; i++) {
-    const wn = i <= 0 ? i + 52 : i;
-    const start = getWeekStartDate(i <= 0 ? i + 52 : i);
-    const end = new Date(start.getTime() + 6 * 24 * 60 * 60 * 1000);
-    options.push({ weekNo: wn, year: start.getFullYear(), label: `(${wn}) ${fmtShortDate(start)} ~ ${fmtShortDate(end)}` });
-  }
-  return options.reverse();
-}
-
 function parseToYMD(s: string): string | null {
   if (!s) return null;
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
@@ -196,11 +172,6 @@ export default function SushiOrdersPage() {
   const { t } = useLanguage();
   const isRoot = username === "root";
 
-  const now = new Date();
-  const currentWeekNo = getFiscalWeekNo(now);
-  const weekOptions = useMemo(() => buildWeekOptions(currentWeekNo), [currentWeekNo]);
-
-  const [selectedWeek, setSelectedWeek] = useState(() => weekOptions[0]);
   const [orders, setOrders] = useState<SushiOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -213,31 +184,27 @@ export default function SushiOrdersPage() {
     setExpanded(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   }
 
-  async function load(weekNo: number, year: number) {
+  async function load() {
     setLoading(true);
-    const res = await fetch(`/api/sushi/orders?weekNo=${weekNo}&year=${year}`);
+    const res = await fetch("/api/sushi/orders");
     const data = await res.json();
     setOrders(Array.isArray(data) ? data : []);
     setLoading(false);
   }
 
-  useEffect(() => { load(selectedWeek.weekNo, selectedWeek.year); }, [selectedWeek]);
+  useEffect(() => { load(); }, []);
 
   async function handleSync() {
     setSyncing(true);
     setSyncMsg("");
     try {
-      const res = await fetch("/api/sushi/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weekNo: selectedWeek.weekNo, year: selectedWeek.year }),
-      });
+      const res = await fetch("/api/sushi/sync", { method: "POST", headers: { "Content-Type": "application/json" } });
       const data = await res.json();
       if (data.error) {
         setSyncMsg(t("orders.syncFail", { msg: data.error }));
       } else {
         setSyncMsg(t("orders.syncSuccess", { n: data.synced }) + (data.errors?.length ? `, ${data.errors.length} failed` : ""));
-        load(selectedWeek.weekNo, selectedWeek.year);
+        load();
       }
     } catch {
       setSyncMsg(t("orders.syncFail", { msg: "network error" }));
@@ -256,7 +223,7 @@ export default function SushiOrdersPage() {
       });
       const data = await res.json();
       setApplyMsg({ id: order.id, ok: !data.error, text: data.error ? data.error : t("orders.applyOk") });
-      if (!data.error) load(selectedWeek.weekNo, selectedWeek.year);
+      if (!data.error) load();
     } catch {
       setApplyMsg({ id: order.id, ok: false, text: t("orders.applyFail") });
     } finally {
@@ -266,7 +233,9 @@ export default function SushiOrdersPage() {
 
   const orderedOrders = orders.filter(o => o.status >= 2 && o.items.length > 0);
   const pendingOrders = orders.filter(o => o.status === 1);
-  const lastSync = orders.length > 0 ? orders[0].syncedAt : null;
+  const lastSync = orders.length > 0
+    ? orders.reduce((a, b) => a.syncedAt > b.syncedAt ? a : b).syncedAt
+    : null;
 
   return (
     <div className="p-4 md:p-8">
@@ -278,29 +247,13 @@ export default function SushiOrdersPage() {
             {lastSync && ` · ${t("orders.lastSync")} ${format(new Date(lastSync), "MM/dd HH:mm")}`}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={`${selectedWeek.weekNo}-${selectedWeek.year}`}
-            onChange={e => {
-              const opt = weekOptions.find(o => `${o.weekNo}-${o.year}` === e.target.value);
-              if (opt) { setSelectedWeek(opt); setSyncMsg(""); }
-            }}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-          >
-            {weekOptions.map(opt => (
-              <option key={`${opt.weekNo}-${opt.year}`} value={`${opt.weekNo}-${opt.year}`}>
-                {opt.label}{opt.weekNo === currentWeekNo ? t("orders.thisWeek") : ""}
-              </option>
-            ))}
-          </select>
-          {isRoot && (
-            <button onClick={handleSync} disabled={syncing}
-              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-              <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
-              <span>{syncing ? t("orders.syncing") : t("orders.syncBtn")}</span>
-            </button>
-          )}
-        </div>
+        {isRoot && (
+          <button onClick={handleSync} disabled={syncing}
+            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
+            <span>{syncing ? t("orders.syncing") : t("orders.syncBtn")}</span>
+          </button>
+        )}
       </div>
 
       {syncMsg && (
@@ -344,8 +297,9 @@ export default function SushiOrdersPage() {
                 {pendingOrders.map(order => (
                   <div key={order.id} className="bg-red-50 border border-red-200 rounded-xl px-4 md:px-6 py-4 flex items-center justify-between">
                     <div>
-                      <div className="flex items-center gap-2 mb-0.5">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                         <span className="font-semibold text-slate-800">{order.supplierName || "Unknown"}</span>
+                        {order.weekNo && <span className="text-xs text-slate-400">W{order.weekNo}</span>}
                         <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">{t("orders.status.pending")}</span>
                       </div>
                       <p className="text-slate-400 text-xs">
@@ -377,6 +331,7 @@ export default function SushiOrdersPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                             <span className="font-semibold text-slate-800">{order.supplierName || "Unknown"}</span>
+                            {order.weekNo && <span className="text-xs text-slate-400">W{order.weekNo}</span>}
                             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusCls}`}>{statusLabel}</span>
                             {order.inventoryApplied && <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-700">{t("orders.inStock")}</span>}
                             {!order.inventoryApplied && (() => { const d = order.deliveryDate ? parseToYMD(order.deliveryDate) : null; return d && d <= new Date().toISOString().slice(0,10) ? <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600">{t("orders.toStock")}</span> : null; })()}
