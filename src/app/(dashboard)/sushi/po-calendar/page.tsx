@@ -6,8 +6,16 @@ import { useLanguage } from "@/components/LanguageProvider";
 
 const OSS_BASE = "https://oss.spientsyserv.com";
 
+function ossUrl(order: SushiOrder): string {
+  // Virtual orders: poNumber stores the editPath like "editorder/virtual/100060/19-May-26/8"
+  if (order.ossId.startsWith("virtual-") && order.poNumber) {
+    return `${OSS_BASE}/shop/${order.poNumber}`;
+  }
+  return `${OSS_BASE}/shop/editorder/${order.ossId}`;
+}
+
 interface SushiOrder {
-  id: string; ossId: string; supplierName: string; status: number;
+  id: string; ossId: string; poNumber: string; supplierName: string; status: number;
   poDate: string | null; orderDate: string | null; deliveryDate: string | null;
   weekNo: number | null;
 }
@@ -144,7 +152,7 @@ export default function POCalendarPage() {
                   {dayOrders.map(order => {
                     const isPending = order.status === 1;
                     const isOverdue = isPending && key < todayYMD;
-                    const ossUrl = `${OSS_BASE}/shop/editorder/${order.ossId}`;
+                    const url = ossUrl(order);
 
                     // Extract time from poDate (e.g. "Tuesday 19-May-26 11:59 pm")
                     const timeMatch = (order.poDate ?? "").match(/(\d{1,2}:\d{2}\s*(?:am|pm))/i);
@@ -152,7 +160,7 @@ export default function POCalendarPage() {
 
                     if (isPending) {
                       return (
-                        <a key={order.id} href={ossUrl} target="_blank" rel="noopener noreferrer"
+                        <a key={order.id} href={url} target="_blank" rel="noopener noreferrer"
                           title={`${t("pocal.openOSS")}: ${order.supplierName}${timeStr ? ` — ${t("pocal.deadline")} ${timeStr}` : ""}`}
                           className={`block text-xs rounded px-1.5 py-0.5 truncate leading-5 cursor-pointer transition-all hover:ring-2 hover:ring-offset-1 hover:shadow-md font-medium ${isOverdue ? "bg-red-500 text-white hover:ring-red-500" : "bg-orange-400 text-white hover:ring-orange-400"}`}>
                           <span className="inline-flex items-center gap-1 w-full truncate">
@@ -211,7 +219,7 @@ export default function POCalendarPage() {
               </div>
               <div className="space-y-2">
                 {overdue.map(o => (
-                  <a key={o.id} href={`${OSS_BASE}/shop/editorder/${o.ossId}`} target="_blank" rel="noopener noreferrer"
+                  <a key={o.id} href={ossUrl(o)} target="_blank" rel="noopener noreferrer"
                     className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-3 hover:bg-red-100 transition-colors">
                     <div>
                       <p className="font-semibold text-slate-800 text-sm">{o.supplierName}</p>
@@ -238,7 +246,7 @@ export default function POCalendarPage() {
                   const timeMatch = (o.poDate ?? "").match(/(\d{1,2}:\d{2}\s*(?:am|pm))/i);
                   const timeStr = timeMatch ? timeMatch[1] : "";
                   return (
-                    <a key={o.id} href={`${OSS_BASE}/shop/editorder/${o.ossId}`} target="_blank" rel="noopener noreferrer"
+                    <a key={o.id} href={ossUrl(o)} target="_blank" rel="noopener noreferrer"
                       className="flex items-center justify-between bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 hover:bg-orange-100 transition-colors">
                       <div>
                         <p className="font-semibold text-slate-800 text-sm">{o.supplierName}</p>

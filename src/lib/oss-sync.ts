@@ -82,29 +82,46 @@ function parseNormalOrders(tbody: string, weekNo: number, year: number): RawOrde
   const orders: RawOrder[] = [];
   const rows = tbody.split(/<\/tr>/i);
   for (const row of rows) {
-    const hrefMatch = row.match(/href=["']([^"']*editorder\/(\d+)(?:\/(\d+))?)[^"']*["']/i);
+    // Match both regular (editorder/123) and virtual (editorder/virtual/suppId/date/week)
+    const hrefMatch = row.match(/href=["'][^"']*editorder\/(virtual\/[^"'? ]+|\d+(?:\/\d+)?)[^"']*["']/i);
     if (!hrefMatch) continue;
-    const id = hrefMatch[2];
-    const editPath = hrefMatch[1].replace(/^.*?(editorder\/.+)$/, "$1").split("?")[0];
+    const editSuffix = hrefMatch[1]; // e.g. "virtual/100060/19-May-26/8" or "12345"
+    const isVirtual = editSuffix.startsWith("virtual/");
+    const editPath = `editorder/${editSuffix}`;
+
     const tdTexts = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)]
       .map(m => m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
-    const poNumber = tdTexts[6] ?? "";
     const supplierRaw = tdTexts[2] ?? "";
     const supplier = supplierRaw.replace(/^[A-Z]\s+/, "").trim();
+    const deadlineStr = tdTexts[1] ?? "";
 
-    // Detect pending status: row contains o-i-circle with "O" (Open/not yet submitted)
-    const isPending = /o-i-circle[^>]*>\s*O\s*</i.test(row);
-    const status = isPending ? 1 : 2;
+    let id: string;
+    let orderDate: string;
+    let poDate: string;
+    let poNumber: string;
+    let status: number;
 
-    // td[0] has order date for submitted; td[1] has the full deadline string for pending
-    const dateCandidate0 = (tdTexts[0] ?? "").match(DATE_RE)?.[1] ?? "";
-    const deadlineStr = tdTexts[1] ?? "";  // e.g. "Tuesday 19-May-26 11:59 pm"
-    const dateCandidate1 = deadlineStr.match(DATE_RE)?.[1] ?? "";
-    const orderDateRaw = dateCandidate0 || dateCandidate1;
-    const orderDate = orderDateRaw ? normalizeShortYear(orderDateRaw) : "";
-
-    // For pending orders: store full deadline string in poDate (shown as cutoff time in UI)
-    const poDate = isPending ? deadlineStr : orderDate;
+    if (isVirtual) {
+      // URL parts: virtual / supplierId / date / weekNo
+      const parts = editSuffix.split("/"); // ["virtual","100060","19-May-26","8"]
+      const supplierId = parts[1] ?? "";
+      const dateStr = parts[2] ?? "";
+      id = `virtual-${supplierId}-${dateStr}-${weekNo}`;
+      orderDate = dateStr ? normalizeShortYear(dateStr) : "";
+      poDate = deadlineStr || orderDate;
+      // Store editPath in poNumber so po-calendar page can build the OSS link
+      poNumber = editPath;
+      status = 1;
+    } else {
+      id = editSuffix.match(/^(\d+)/)?.[1] ?? editSuffix;
+      const dateCandidate0 = (tdTexts[0] ?? "").match(DATE_RE)?.[1] ?? "";
+      const dateCandidate1 = deadlineStr.match(DATE_RE)?.[1] ?? "";
+      const orderDateRaw = dateCandidate0 || dateCandidate1;
+      orderDate = orderDateRaw ? normalizeShortYear(orderDateRaw) : "";
+      poDate = (/o-i-circle[^>]*>\s*O\s*</i.test(row)) ? deadlineStr : orderDate;
+      poNumber = tdTexts[6] ?? "";
+      status = /o-i-circle[^>]*>\s*O\s*</i.test(row) ? 1 : 2;
+    }
 
     orders.push({ id, poNumber, supplier, status, poDate, orderDate, deliveryDate: null, weekNo, year, editPath });
   }
@@ -188,19 +205,22 @@ async function syncWeekOrders(
     const results = await Promise.allSettled(
       batch.map(async (order) => {
         const headers = { "Content-Type": "application/x-www-form-urlencoded", "Cookie": `ci_session=${session}` };
+        const isVirtualOrder = order.id.startsWith("virtual-");
         const [itemsRes, detailRes] = await Promise.all([
-          fetch(`${BASE}/shop/home/getExistingItems`, {
-            method: "POST", headers,
-            body: new URLSearchParams({ headerid: order.id }),
-          }),
+          // Virtual orders have no real ID — skip items fetch
+          !isVirtualOrder
+            ? fetch(`${BASE}/shop/home/getExistingItems`, { method: "POST", headers, body: new URLSearchParams({ headerid: order.id }) })
+            : Promise.resolve(null),
           order.deliveryDate === null && order.editPath
             ? fetch(`${BASE}/shop/${order.editPath}`, { headers: { Cookie: `ci_session=${session}`, Referer: `${BASE}/shop/home`, "User-Agent": "Mozilla/5.0" } })
             : Promise.resolve(null),
         ]);
 
-        const text = await itemsRes.text();
         let items: Record<string, string>[] = [];
-        try { const parsed = JSON.parse(text); items = Array.isArray(parsed) ? parsed : []; } catch { items = []; }
+        if (itemsRes) {
+          const text = await itemsRes.text();
+          try { const parsed = JSON.parse(text); items = Array.isArray(parsed) ? parsed : []; } catch { items = []; }
+        }
 
         let deliveryDate = order.deliveryDate;
         if (detailRes) {
