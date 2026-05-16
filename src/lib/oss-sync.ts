@@ -30,10 +30,15 @@ function ossDateFmt(d: Date): string {
 }
 
 // FY2026: week 1 starts March 30, 2026
+const FY2026_START = new Date("2026-03-30").getTime();
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 function getFiscalWeek(d: Date): number {
-  const fy2026Start = new Date("2026-03-30").getTime();
-  const weekMs = 7 * 24 * 60 * 60 * 1000;
-  return Math.max(1, Math.floor((d.getTime() - fy2026Start) / weekMs) + 1);
+  return Math.max(1, Math.floor((d.getTime() - FY2026_START) / WEEK_MS) + 1);
+}
+
+function getWeekMonday(weekNo: number): Date {
+  return new Date(FY2026_START + (weekNo - 1) * WEEK_MS);
 }
 
 async function ossLogin(): Promise<string> {
@@ -124,8 +129,10 @@ async function syncWeekOrders(
   session: string,
   weekNo: number,
   year: number,
-  now: Date,
+  _now: Date,
 ): Promise<WeekSyncResult> {
+  // Use the Monday of the target week as the selected day, so OSS returns correct daily POs
+  const weekMonday = getWeekMonday(weekNo);
   const errors: string[] = [];
   const debug: string[] = [];
   const newOrders: string[] = [];
@@ -146,7 +153,7 @@ async function syncWeekOrders(
       last_row: "",
       dailypo_week_no: String(weekNo),
       dailypo_year: String(year),
-      dailypo_selected_day: ossDateFmt(now),
+      dailypo_selected_day: ossDateFmt(weekMonday),
       supplier_id: "0",
     }),
   });
@@ -304,11 +311,9 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
   const currentWeekNo = getFiscalWeek(now);
   const year = now.getFullYear();
 
-  // Sync from 8 weeks ago to 3 weeks ahead to cover all active orders
+  // Sync from week 1 of this FY to 4 weeks ahead to cover all active orders
   const weekRange: Array<{ weekNo: number; year: number }> = [];
-  for (let offset = -8; offset <= 3; offset++) {
-    const wn = currentWeekNo + offset;
-    if (wn < 1) continue;
+  for (let wn = 1; wn <= currentWeekNo + 4; wn++) {
     weekRange.push({ weekNo: wn, year });
   }
 
