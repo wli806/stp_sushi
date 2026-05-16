@@ -288,7 +288,8 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
   // First sync: fetch all weeks from week 1 (slow, but only once).
   // Subsequent syncs: only current-1 through current+4 (fast incremental).
   const hasHistory = (await prisma.sushiOrder.count()) > 0;
-  const startWeek = hasHistory ? Math.max(1, currentWeekNo - 1) : 1;
+  // Incremental: only current week onward (past weeks stay in DB as-is)
+  const startWeek = hasHistory ? currentWeekNo : 1;
   const endWeek = currentWeekNo + 4;
 
   const allErrors: string[] = [];

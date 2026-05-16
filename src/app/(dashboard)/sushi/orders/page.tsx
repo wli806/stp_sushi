@@ -62,6 +62,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
   const now = new Date();
   const [cal, setCal] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [hoveredSupplier, setHoveredSupplier] = useState<string | null>(null);
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const MONTH_NAMES = lang === "en" ? MONTH_NAMES_EN : MONTH_NAMES_ZH;
   const DOW_NAMES = lang === "en" ? DOW_EN : DOW_ZH;
 
@@ -75,6 +76,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
   const dayMap = useMemo(() => {
     const map = new Map<string, DayEvent[]>();
     for (const o of orders) {
+      if (o.status >= 2 && o.items.length === 0) continue;
       const supplier = o.supplierName || "Unknown";
       const orderYMD = o.orderDate ? parseToYMD(o.orderDate) : null;
       const deliveryYMD = o.deliveryDate ? parseToYMD(o.deliveryDate) : null;
@@ -123,11 +125,15 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
           const key = `${cal.year}-${String(cal.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const events = dayMap.get(key) ?? [];
           const isToday = key === todayKey;
+          const MAX_VISIBLE = 4;
+          const isExpanded = expandedDays.has(key);
+          const visibleEvents = events.length > MAX_VISIBLE && !isExpanded ? events.slice(0, MAX_VISIBLE) : events;
+          const hiddenCount = events.length - MAX_VISIBLE;
           return (
             <div key={i} className="relative min-h-[72px] md:min-h-[100px] border-r border-b border-slate-100 p-1.5">
               <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full mx-auto ${isToday ? "bg-orange-500 text-white" : "text-slate-500"}`}>{day}</div>
               <div className="space-y-0.5">
-                {events.map((ev, ei) => {
+                {visibleEvents.map((ev, ei) => {
                   const colors = supplierColorMap.get(ev.supplier) ?? CAL_PALETTE[0];
                   const isActive = hoveredSupplier === ev.supplier;
                   const isDimmed = hoveredSupplier !== null && !isActive;
@@ -149,6 +155,18 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
                     </div>
                   );
                 })}
+                {events.length > MAX_VISIBLE && !isExpanded && (
+                  <button onClick={() => setExpandedDays(prev => { const next = new Set(prev); next.add(key); return next; })}
+                    className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 leading-4 pt-0.5">
+                    +{hiddenCount} {lang === "en" ? "more" : "更多"}
+                  </button>
+                )}
+                {events.length > MAX_VISIBLE && isExpanded && (
+                  <button onClick={() => setExpandedDays(prev => { const next = new Set(prev); next.delete(key); return next; })}
+                    className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 leading-4 pt-0.5">
+                    {lang === "en" ? "collapse" : "收起"}
+                  </button>
+                )}
               </div>
             </div>
           );

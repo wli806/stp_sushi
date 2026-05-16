@@ -50,6 +50,7 @@ export default function POCalendarPage() {
   const [orders, setOrders] = useState<SushiOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [cal, setCal] = useState({ year: now.getFullYear(), month: now.getMonth() });
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   const MONTH_NAMES = lang === "en" ? MONTH_NAMES_EN : MONTH_NAMES_ZH;
   const DOW_NAMES = lang === "en" ? DOW_EN : DOW_ZH;
@@ -142,6 +143,10 @@ export default function POCalendarPage() {
             const dayOrders = dayMap.get(key) ?? [];
             const isToday = key === todayYMD;
             const isPast = key < todayYMD;
+            const MAX_VISIBLE = 4;
+            const isExpanded = expandedDays.has(key);
+            const visibleOrders = dayOrders.length > MAX_VISIBLE && !isExpanded ? dayOrders.slice(0, MAX_VISIBLE) : dayOrders;
+            const hiddenCount = dayOrders.length - MAX_VISIBLE;
 
             return (
               <div key={i} className={`min-h-[80px] md:min-h-[110px] border-r border-b border-slate-100 p-1.5 ${isPast && dayOrders.some(o => o.status === 1) ? "bg-red-50/40" : ""}`}>
@@ -149,7 +154,7 @@ export default function POCalendarPage() {
                   {day}
                 </div>
                 <div className="space-y-0.5">
-                  {dayOrders.map(order => {
+                  {visibleOrders.map(order => {
                     const isPending = order.status === 1;
                     const isOverdue = isPending && key < todayYMD;
                     const url = ossUrl(order);
@@ -183,6 +188,18 @@ export default function POCalendarPage() {
                       );
                     }
                   })}
+                  {dayOrders.length > MAX_VISIBLE && !isExpanded && (
+                    <button onClick={() => setExpandedDays(prev => { const next = new Set(prev); next.add(key); return next; })}
+                      className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 leading-4 pt-0.5">
+                      +{hiddenCount} {lang === "en" ? "more" : "更多"}
+                    </button>
+                  )}
+                  {dayOrders.length > MAX_VISIBLE && isExpanded && (
+                    <button onClick={() => setExpandedDays(prev => { const next = new Set(prev); next.delete(key); return next; })}
+                      className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 leading-4 pt-0.5">
+                      {lang === "en" ? "collapse" : "收起"}
+                    </button>
+                  )}
                 </div>
               </div>
             );
