@@ -55,20 +55,24 @@ export async function GET(request: NextRequest) {
       const templates = (data.dailypo_template ?? []) as Record<string, unknown>[];
       const tbodyLen = (data.tbody ?? "").length;
 
+      const tbody: string = data.tbody ?? "";
+      // Find all href patterns in tbody
+      const hrefs = [...tbody.matchAll(/href=["']([^"']{0,120})["']/gi)].map(m => m[1]);
+      // Find first row that looks like an order row
+      const firstRow = tbody.split(/<\/tr>/i).find(r => r.includes("o-i-circle") || r.includes("editorder")) ?? "";
+
       results.push({
         day: ossDateFmt(day),
         responseKeys: Object.keys(data),
         dailypo_count: templates.length,
         tbody_length: tbodyLen,
-        // Show first 3 templates with full detail
-        sample_templates: templates.slice(0, 3).map(t => ({
-          id: t.id, po_status: t.po_status, display_name: t.display_name,
-          supplier_name: t.supplier_name, order_date: t.order_date,
-          delivery_date: t.delivery_date, week_no: t.week_no, year: t.year,
-        })),
-        // Show tbody snippet
-        tbody_snippet: (data.tbody ?? "").slice(0, 300),
+        // All hrefs found in tbody (to identify the URL pattern)
+        all_hrefs_sample: hrefs.slice(0, 20),
+        // Full first order row HTML
+        first_order_row: firstRow.slice(0, 1500),
       });
+      // Only need one day since all days return same data
+      break;
     }
 
     return NextResponse.json({ weekNo, year, weekMonday: ossDateFmt(weekMonday), results });
