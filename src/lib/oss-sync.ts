@@ -292,6 +292,24 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
     } catch (e) { allErrors.push(`Week ${wn}: ${String(e)}`); }
   }
 
+  // 清理：状态仍为 pending 但下单日期已过的订单（即漏单），从数据库删除
+  const todayYMD = now.toISOString().slice(0, 10);
+  const stalePending = await prisma.sushiOrder.findMany({
+    where: { status: 1 },
+    select: { id: true, orderDate: true, supplierName: true },
+  });
+  const toDelete = stalePending
+    .filter(o => {
+      if (!o.orderDate) return false;
+      const ymd = parseDeliveryDate(o.orderDate);
+      return ymd !== null && ymd < todayYMD;
+    })
+    .map(o => o.id);
+  if (toDelete.length > 0) {
+    await prisma.sushiOrder.deleteMany({ where: { id: { in: toDelete } } });
+    allDebug.push(`清理漏单 ${toDelete.length} 条（下单日期已过且未提交）`);
+  }
+
   if (allNewOrders.length > 0) {
     const unique = [...new Set(allNewOrders)];
     await wxNotify(`🛒 寿司系统：${unique.length} 个新采购订单`, unique.map(s => `- ${s}`).join("\n"));
