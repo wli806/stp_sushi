@@ -91,9 +91,18 @@ function parseNormalOrders(tbody: string, weekNo: number, year: number): RawOrde
     const poNumber = tdTexts[6] ?? "";
     const supplierRaw = tdTexts[2] ?? "";
     const supplier = supplierRaw.replace(/^[A-Z]\s+/, "").trim();
-    const orderDateRaw = (tdTexts[0] ?? "").match(DATE_RE)?.[1] ?? "";
+
+    // td[0] has order date for submitted orders; td[1] has the deadline for pending ones
+    const dateCandidate0 = (tdTexts[0] ?? "").match(DATE_RE)?.[1] ?? "";
+    const dateCandidate1 = (tdTexts[1] ?? "").match(DATE_RE)?.[1] ?? "";
+    const orderDateRaw = dateCandidate0 || dateCandidate1;
     const orderDate = orderDateRaw ? normalizeShortYear(orderDateRaw) : "";
-    orders.push({ id, poNumber, supplier, status: 2, poDate: orderDate, orderDate, deliveryDate: null, weekNo, year, editPath });
+
+    // Detect pending status: row contains o-i-circle with "O" (Open/not yet submitted)
+    const isPending = /o-i-circle[^>]*>\s*O\s*</i.test(row);
+    const status = isPending ? 1 : 2;
+
+    orders.push({ id, poNumber, supplier, status, poDate: orderDate, orderDate, deliveryDate: null, weekNo, year, editPath });
   }
   return orders;
 }
@@ -135,7 +144,6 @@ async function syncWeekOrders(
   weekNo: number,
   year: number,
   now: Date,
-  fetchAllDays: boolean,
 ): Promise<WeekSyncResult> {
   const errors: string[] = [];
   const debug: string[] = [];
@@ -148,23 +156,11 @@ async function syncWeekOrders(
   let mergedTemplates: OSSTemplate[] = [];
   let tbody = "";
 
-  if (fetchAllDays) {
-    // For current & future weeks: fetch all weekdays in parallel to catch every daily PO template
-    const days = Array.from({ length: 7 }, (_, i) => new Date(weekMonday.getTime() + i * 86400000));
-    const results = await Promise.all(days.map(d => fetchWeekDay(session, weekNo, year, d).catch(() => ({ templates: [], tbody: "" }))));
-    const seenIds = new Set<string>();
-    for (const r of results) {
-      for (const t of r.templates) {
-        if (t.id && !seenIds.has(t.id)) { seenIds.add(t.id); mergedTemplates.push(t); }
-      }
-      if (r.tbody && r.tbody.length > tbody.length) tbody = r.tbody;
-    }
-  } else {
-    // Past weeks: single request is enough (submitted orders are in tbody)
-    const r = await fetchWeekDay(session, weekNo, year, weekMonday).catch(() => ({ templates: [], tbody: "" }));
-    mergedTemplates = r.templates.filter(t => t.id !== null);
-    tbody = r.tbody;
-  }
+  // One request per week is enough — all days return identical tbody data
+  const r = await fetchWeekDay(session, weekNo, year, weekMonday).catch(() => ({ templates: [], tbody: "" }));
+  // Only keep dailypo templates that have a real ID (already-created POs)
+  mergedTemplates = r.templates.filter(t => t.id !== null);
+  tbody = r.tbody;
 
   const dailyOrders: RawOrder[] = mergedTemplates
     .filter(o => o.id !== null)
@@ -281,8 +277,7 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
   for (let wn = startWeek; wn <= endWeek; wn++) {
     try {
       // Fetch all days only for current week and future (to get pending daily PO templates)
-      const fetchAllDays = wn >= currentWeekNo;
-      const result = await syncWeekOrders(session, wn, year, now, fetchAllDays);
+      const result = await syncWeekOrders(session, wn, year, now);
       totalSynced += result.synced;
       allErrors.push(...result.errors);
       allDebug.push(...result.debug);
