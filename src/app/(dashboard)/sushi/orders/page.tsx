@@ -25,6 +25,10 @@ const MONTH_ABBR: Record<string, string> = {
   jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12",
 };
 
+function toLocalYMD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
 function parseToYMD(s: string): string | null {
   if (!s) return null;
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
@@ -33,7 +37,7 @@ function parseToYMD(s: string): string | null {
   const dm = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})/);
   if (dm) { const m = MONTH_ABBR[dm[2].toLowerCase()]; if (m) return `${dm[3]}-${m}-${dm[1].padStart(2,"0")}`; }
   const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  return isNaN(d.getTime()) ? null : toLocalYMD(d);
 }
 
 interface DayEvent { supplier: string; pairKey: string; items: SushiItem[]; }
@@ -68,7 +72,7 @@ function getTwoWeekDays(): string[] {
   for (let i = 0; i < 14; i++) {
     const d = new Date(thisMonday);
     d.setDate(thisMonday.getDate() + i);
-    days.push(d.toISOString().slice(0, 10));
+    days.push(toLocalYMD(d));
   }
   return days;
 }
@@ -83,7 +87,7 @@ function getWeekBounds() {
   function addDays(n: number): string {
     const r = new Date(thisMonday);
     r.setDate(r.getDate() + n);
-    return r.toISOString().slice(0, 10);
+    return toLocalYMD(r);
   }
   return { thisStart: addDays(0), thisEnd: addDays(6), nextStart: addDays(7), nextEnd: addDays(13) };
 }
@@ -91,7 +95,7 @@ function getWeekBounds() {
 function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
   const { lang, t } = useLanguage();
   const now = new Date();
-  const todayKey = now.toISOString().slice(0, 10);
+  const todayKey = toLocalYMD(now);
   const DOW_NAMES = lang === "en" ? DOW_EN : DOW_ZH;
   const [selectedEvent, setSelectedEvent] = useState<(DayEvent & { deliveryDate: string }) | null>(null);
 
@@ -224,9 +228,10 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
 }
 
 export default function SushiOrdersPage() {
-  const { username } = useSession();
+  const { username, role } = useSession();
   const { t } = useLanguage();
   const isRoot = username === "root";
+  const canSync = role === "OWNER" || isRoot;
 
   const [orders, setOrders] = useState<SushiOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -291,7 +296,7 @@ export default function SushiOrdersPage() {
   const pendingOrders = orders.filter(o => o.status === 1);
 
   const weekBounds = useMemo(() => getWeekBounds(), []);
-  const todayYMD = new Date().toISOString().slice(0, 10);
+  const todayYMD = toLocalYMD(new Date());
 
   const thisWeekDelivered = useMemo(() =>
     orders.filter(o => {
@@ -328,7 +333,7 @@ export default function SushiOrdersPage() {
             {lastSync && ` · ${t("orders.lastSync")} ${format(new Date(lastSync), "MM/dd HH:mm")}`}
           </p>
         </div>
-        {isRoot && (
+        {canSync && (
           <button onClick={handleSync} disabled={syncing}
             className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
@@ -415,7 +420,7 @@ export default function SushiOrdersPage() {
                             {order.weekNo && <span className="text-xs text-slate-400">W{order.weekNo}</span>}
                             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusCls}`}>{statusLabel}</span>
                             {order.inventoryApplied && <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-700">{t("orders.inStock")}</span>}
-                            {!order.inventoryApplied && (() => { const d = order.deliveryDate ? parseToYMD(order.deliveryDate) : null; return d && d <= new Date().toISOString().slice(0,10) ? <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600">{t("orders.toStock")}</span> : null; })()}
+                            {!order.inventoryApplied && (() => { const d = order.deliveryDate ? parseToYMD(order.deliveryDate) : null; return d && d <= toLocalYMD(new Date()) ? <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600">{t("orders.toStock")}</span> : null; })()}
                           </div>
                           <p className="text-slate-400 text-xs">
                             {order.poNumber && `${t("orders.poNumber")} ${order.poNumber}`}
@@ -425,7 +430,7 @@ export default function SushiOrdersPage() {
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0 ml-4">
                           <span className="text-sm text-slate-500">{order.items.length} {t("orders.items")}</span>
-                          {isRoot && !order.inventoryApplied && (() => { const d = order.deliveryDate ? parseToYMD(order.deliveryDate) : null; return d && d <= new Date().toISOString().slice(0,10); })() && (
+                          {canSync && !order.inventoryApplied && (() => { const d = order.deliveryDate ? parseToYMD(order.deliveryDate) : null; return d && d <= toLocalYMD(new Date()); })() && (
                             <button onClick={() => handleApplyInventory(order)} disabled={applying === order.id}
                               className="flex items-center gap-1 px-2 py-1 bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white rounded-lg text-xs font-medium transition-colors">
                               <PackagePlus size={13} />
