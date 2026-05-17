@@ -119,7 +119,8 @@ export default function POCalendarPage() {
       </div>
 
       {/* 日历 */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm mb-6">
+      <div className="overflow-x-auto -mx-4 md:mx-0 mb-6">
+      <div className="min-w-[480px] mx-4 md:mx-0 bg-white rounded-xl border border-slate-100 shadow-sm">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <button onClick={() => setCal(c => { const d = new Date(c.year, c.month - 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
             className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
@@ -221,6 +222,7 @@ export default function POCalendarPage() {
             {t("pocal.legend.ordered")}
           </div>
         </div>
+      </div>
       </div>
 
       {/* 待下单列表 */}

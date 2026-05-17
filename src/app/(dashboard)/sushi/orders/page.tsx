@@ -172,7 +172,8 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
 
   return (
     <>
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm mb-6">
+      <div className="overflow-x-auto -mx-4 md:mx-0 mb-6">
+      <div className="min-w-[480px] mx-4 md:mx-0 bg-white rounded-xl border border-slate-100 shadow-sm">
         <div className="grid grid-cols-7 border-b border-slate-100">
           {DOW_NAMES.map(d => <div key={d} className="text-center text-xs text-slate-400 py-2 font-medium">{d}</div>)}
         </div>
@@ -196,6 +197,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
           ))}
           <div className="ml-auto text-xs text-slate-400">{lang === "en" ? "Click delivery to view items" : "点击配送日查看商品明细"}</div>
         </div>
+      </div>
       </div>
 
       {selectedEvent && (
@@ -343,15 +345,15 @@ export default function SushiOrdersPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-2 md:gap-4 mb-6">
         {[
           { label: t("orders.stat.total"), value: thisWeekDelivered, color: "text-green-600" },
           { label: t("orders.stat.ordered"), value: thisWeekPending, color: "text-blue-600" },
           { label: t("orders.stat.pending"), value: nextWeekNeedOrder, color: "text-orange-500" },
         ].map(({ label, value, color }) => (
-          <div key={label} className="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-            <p className="text-xs text-slate-400 mb-1">{label}</p>
-            <p className={`text-2xl font-bold ${color}`}>{value}</p>
+          <div key={label} className="bg-white rounded-xl border border-slate-100 p-3 md:p-4 shadow-sm">
+            <p className="text-xs text-slate-400 mb-1 leading-tight">{label}</p>
+            <p className={`text-xl md:text-2xl font-bold ${color}`}>{value}</p>
           </div>
         ))}
       </div>
@@ -370,7 +372,7 @@ export default function SushiOrdersPage() {
           <div className="flex items-center gap-2 mb-3">
             <AlertCircle size={16} className="text-red-500" />
             <h2 className="font-semibold text-slate-700">{t("orders.section.pending")} <span className="text-red-500">({pendingOrders.length})</span></h2>
-            <span className="text-xs text-slate-400">— {t("orders.section.pendingDesc")}</span>
+            <span className="hidden sm:inline text-xs text-slate-400">— {t("orders.section.pendingDesc")}</span>
           </div>
           <div className="space-y-2">
             {pendingOrders.map(order => (

@@ -88,19 +88,19 @@ export default function SushiInventoryPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-8">
+      <div className="flex items-center justify-between mb-6 gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">{t("inventory.title")}</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-slate-800">{t("inventory.title")}</h1>
           <p className="text-slate-500 text-sm mt-0.5">{t("inventory.subtitle")}</p>
         </div>
         <button onClick={openAdd}
-          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          <Plus size={16} /> {t("inventory.addBtn")}
+          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-3 md:px-4 py-2 rounded-lg text-sm font-medium flex-shrink-0">
+          <Plus size={16} /> <span className="hidden sm:inline">{t("inventory.addBtn")}</span><span className="sm:hidden">{t("common.add") || "Add"}</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto">
         {loading ? (
           <div className="p-12 text-center text-slate-400">{t("common.loading")}</div>
         ) : items.length === 0 ? (
@@ -109,28 +109,28 @@ export default function SushiInventoryPage() {
             <p className="text-slate-400">{t("inventory.noRecord")}</p>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[520px]">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 text-xs">
-                <th className="text-left px-6 py-3 font-medium">{t("inventory.col.name")}</th>
-                <th className="text-center px-4 py-3 font-medium">{t("inventory.col.qty")}</th>
-                <th className="text-center px-4 py-3 font-medium">{t("inventory.col.unit")}</th>
-                <th className="text-left px-4 py-3 font-medium">{t("inventory.col.notes")}</th>
-                <th className="text-right px-4 py-3 font-medium">{t("inventory.col.updatedAt")}</th>
-                <th className="text-center px-4 py-3 font-medium">{t("common.actions")}</th>
+                <th className="text-left px-4 md:px-6 py-3 font-medium">{t("inventory.col.name")}</th>
+                <th className="text-center px-3 md:px-4 py-3 font-medium">{t("inventory.col.qty")}</th>
+                <th className="text-center px-3 md:px-4 py-3 font-medium">{t("inventory.col.unit")}</th>
+                <th className="text-left px-3 md:px-4 py-3 font-medium hidden sm:table-cell">{t("inventory.col.notes")}</th>
+                <th className="text-right px-3 md:px-4 py-3 font-medium hidden md:table-cell">{t("inventory.col.updatedAt")}</th>
+                <th className="text-center px-3 md:px-4 py-3 font-medium">{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {items.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-3.5 font-medium text-slate-800">{item.name}</td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center justify-center gap-2">
+                  <td className="px-4 md:px-6 py-3.5 font-medium text-slate-800">{item.name}</td>
+                  <td className="px-3 md:px-4 py-3.5">
+                    <div className="flex items-center justify-center gap-1.5 md:gap-2">
                       <button onClick={() => handleAdjust(item.id, -1)} disabled={adjusting === item.id}
                         className="w-6 h-6 flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-40 transition-colors">
                         <Minus size={12} />
                       </button>
-                      <span className="w-12 text-center font-semibold text-slate-800 tabular-nums">
+                      <span className="w-10 text-center font-semibold text-slate-800 tabular-nums">
                         {item.quantity % 1 === 0 ? item.quantity : item.quantity.toFixed(1)}
                       </span>
                       <button onClick={() => handleAdjust(item.id, 1)} disabled={adjusting === item.id}
@@ -139,13 +139,13 @@ export default function SushiInventoryPage() {
                       </button>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 text-center text-slate-500">{item.unit || "—"}</td>
-                  <td className="px-4 py-3.5 text-slate-400 text-xs">{item.notes || "—"}</td>
-                  <td className="px-4 py-3.5 text-right text-slate-400 text-xs">
+                  <td className="px-3 md:px-4 py-3.5 text-center text-slate-500">{item.unit || "—"}</td>
+                  <td className="px-3 md:px-4 py-3.5 text-slate-400 text-xs hidden sm:table-cell">{item.notes || "—"}</td>
+                  <td className="px-3 md:px-4 py-3.5 text-right text-slate-400 text-xs hidden md:table-cell">
                     {format(new Date(item.updatedAt), "MM/dd HH:mm")}
                   </td>
-                  <td className="px-4 py-3.5 text-center">
-                    <div className="flex items-center justify-center gap-2">
+                  <td className="px-3 md:px-4 py-3.5 text-center">
+                    <div className="flex items-center justify-center gap-1.5 md:gap-2">
                       <button onClick={() => openEdit(item)} className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50">
                         <Pencil size={14} />
                       </button>
