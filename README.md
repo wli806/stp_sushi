@@ -1,5 +1,7 @@
 # STP Sushi — Store Management System
 
+> 🌐 [中文文档](README.zh.md) | English
+
 A full-stack internal management system for a sushi store, built with Next.js and deployed on Alibaba Cloud. Covers purchasing, inventory, goods receiving, and staff training.
 
 ---
