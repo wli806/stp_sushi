@@ -119,13 +119,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
       if (o.status < 2) continue;
       const supplier = o.supplierName || "Unknown";
       const pairKey = o.id;
-      const orderYMD = o.orderDate ? parseToYMD(o.orderDate) : null;
       const deliveryYMD = o.deliveryDate ? parseToYMD(o.deliveryDate) : null;
-      if (orderYMD) {
-        const evs = map.get(orderYMD) ?? [];
-        evs.push({ type: "order", supplier, pairKey, items: [] });
-        map.set(orderYMD, evs);
-      }
       if (deliveryYMD && o.items.length > 0) {
         const evs = map.get(deliveryYMD) ?? [];
         evs.push({ type: "delivery", supplier, pairKey, items: o.items });
@@ -200,7 +194,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
               {supplierShort(supplier)}
             </div>
           ))}
-          <div className="ml-auto text-xs text-slate-400">{lang === "en" ? "Light = ordered · Dark = delivery (click)" : "浅色 = 下单日 · 深色 = 配送日（点击查看）"}</div>
+          <div className="ml-auto text-xs text-slate-400">{lang === "en" ? "Click delivery to view items" : "点击配送日查看商品明细"}</div>
         </div>
       </div>
 
