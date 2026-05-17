@@ -262,16 +262,23 @@ export default function SushiOrdersPage() {
     const days = getThreeWeekDays();
     return { thisStart: days[7], thisEnd: days[13], nextStart: days[14], nextEnd: days[20] };
   }, []);
-  const thisWeekDeliveries = useMemo(() =>
+  const todayYMD = new Date().toISOString().slice(0, 10);
+  const thisWeekDelivered = useMemo(() =>
     orders.filter(o => {
       if (o.status < 2 || !o.deliveryDate) return false;
       const ymd = parseToYMD(o.deliveryDate);
-      return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd;
+      return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd && ymd <= todayYMD;
     }).length, [orders, weekBounds]);
-  const nextWeekDeliveries = useMemo(() =>
+  const thisWeekPending = useMemo(() =>
     orders.filter(o => {
       if (o.status < 2 || !o.deliveryDate) return false;
       const ymd = parseToYMD(o.deliveryDate);
+      return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd && ymd > todayYMD;
+    }).length, [orders, weekBounds]);
+  const nextWeekNeedOrder = useMemo(() =>
+    orders.filter(o => {
+      if (o.status !== 1 || !o.orderDate) return false;
+      const ymd = parseToYMD(o.orderDate);
       return ymd && ymd >= weekBounds.nextStart && ymd <= weekBounds.nextEnd;
     }).length, [orders, weekBounds]);
 
@@ -306,9 +313,9 @@ export default function SushiOrdersPage() {
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: t("orders.stat.total"), value: pendingOrders.length, color: "text-red-500" },
-          { label: t("orders.stat.ordered"), value: thisWeekDeliveries, color: "text-blue-600" },
-          { label: t("orders.stat.pending"), value: nextWeekDeliveries, color: "text-orange-500" },
+          { label: t("orders.stat.total"), value: thisWeekDelivered, color: "text-green-600" },
+          { label: t("orders.stat.ordered"), value: thisWeekPending, color: "text-blue-600" },
+          { label: t("orders.stat.pending"), value: nextWeekNeedOrder, color: "text-orange-500" },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
             <p className="text-xs text-slate-400 mb-1">{label}</p>
