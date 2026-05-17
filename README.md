@@ -80,9 +80,27 @@ DATABASE_URL="file:./prisma/dev.db"
 JWT_SECRET="your-secret-key"
 OSS_BASE_URL="https://oss.spientsyserv.com"
 DASHSCOPE_API_KEY="sk-your-dashscope-key"
+SERVERCHAN_KEY="your-serverchan-key"
+NOTIFY_SECRET="your-notify-secret"
 ```
 
-- `DASHSCOPE_API_KEY` — Get from [Alibaba Cloud Model Studio](https://modelstudio.console.alibabacloud.com). Used for invoice image recognition in Goods Receiving.
+| Variable | Description |
+|----------|-------------|
+| `DASHSCOPE_API_KEY` | Get from [Alibaba Cloud Model Studio](https://modelstudio.console.alibabacloud.com). Used for invoice image recognition in Goods Receiving. |
+| `SERVERCHAN_KEY` | Get from [Server酱](https://sct.ftqq.com). Used to push WeChat notifications for pending orders. |
+| `NOTIFY_SECRET` | A self-defined secret string. Used to authenticate the daily cron notification endpoint. |
+
+## Notifications (Server酱 + WeChat)
+
+A daily cron job calls `GET /api/sushi/notify?secret=<NOTIFY_SECRET>` to push a WeChat reminder for all pending orders via [Server酱](https://sct.ftqq.com).
+
+Set up on the server with crontab:
+```bash
+# Send notification every day at 8:00 AM
+0 8 * * * curl "http://localhost:3001/api/sushi/notify?secret=your-notify-secret"
+```
+
+Test the push from the app: log in as `root` and call `POST /api/sushi/notify-test`.
 
 ## Local Development
 
@@ -216,9 +234,27 @@ DATABASE_URL="file:./prisma/dev.db"
 JWT_SECRET="your-secret-key"
 OSS_BASE_URL="https://oss.spientsyserv.com"
 DASHSCOPE_API_KEY="sk-your-dashscope-key"
+SERVERCHAN_KEY="your-serverchan-key"
+NOTIFY_SECRET="your-notify-secret"
 ```
 
-- `DASHSCOPE_API_KEY` — 在 [阿里云百炼控制台](https://modelstudio.console.alibabacloud.com) 创建，用于收货模块的发票图片识别。
+| 变量 | 说明 |
+|------|------|
+| `DASHSCOPE_API_KEY` | 在 [阿里云百炼控制台](https://modelstudio.console.alibabacloud.com) 创建，用于收货模块发票图片识别。 |
+| `SERVERCHAN_KEY` | 在 [Server酱](https://sct.ftqq.com) 获取，用于向微信推送待下单提醒。 |
+| `NOTIFY_SECRET` | 自定义字符串，用于鉴权每日定时通知接口。 |
+
+## 微信通知（Server酱）
+
+每日定时任务调用 `GET /api/sushi/notify?secret=<NOTIFY_SECRET>`，通过 [Server酱](https://sct.ftqq.com) 向微信推送所有待下单订单的提醒。
+
+在服务器上用 crontab 设置定时任务：
+```bash
+# 每天早上 8:00 发送通知
+0 8 * * * curl "http://localhost:3001/api/sushi/notify?secret=your-notify-secret"
+```
+
+以 `root` 账号登录后，可调用 `POST /api/sushi/notify-test` 测试推送是否正常。
 
 ## 本地开发
 
