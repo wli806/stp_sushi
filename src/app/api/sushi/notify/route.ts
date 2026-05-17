@@ -18,11 +18,11 @@ function parseToYMD(s: string): string | null {
 // Env vars required: SERVER_CHAN_KEY, NOTIFY_SECRET
 export async function GET(request: NextRequest) {
   const secret = request.nextUrl.searchParams.get("secret");
-  if (!process.env.NOTIFY_SECRET || secret !== process.env.NOTIFY_SECRET) {
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const scKey = process.env.SERVER_CHAN_KEY;
+  const scKey = process.env.SERVERCHAN_KEY;
   if (!scKey) return NextResponse.json({ error: "SERVER_CHAN_KEY not configured" }, { status: 500 });
 
   const orders = await prisma.sushiOrder.findMany({ where: { status: 1 } });
