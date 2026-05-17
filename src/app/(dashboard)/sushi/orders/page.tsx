@@ -104,6 +104,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
   const now = new Date();
   const todayKey = toLocalYMD(now);
   const DOW_NAMES = lang === "en" ? DOW_EN : DOW_ZH;
+  const DOW_NAMES_SHORT = lang === "en" ? ["M","T","W","T","F","S","S"] : DOW_ZH;
   const [selectedEvent, setSelectedEvent] = useState<(DayEvent & { deliveryDate: string }) | null>(null);
 
   const supplierColorMap = useMemo(() => {
@@ -143,21 +144,21 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
     const events = dayMap.get(ymd) ?? [];
     const isToday = ymd === todayKey;
     return (
-      <div key={ymd} className="min-h-[72px] md:min-h-[100px] border-r border-b border-slate-100 p-1.5">
-        <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full mx-auto ${isToday ? "bg-orange-500 text-white" : "text-slate-500"}`}>{day}</div>
+      <div key={ymd} className="min-h-[52px] sm:min-h-[72px] md:min-h-[100px] border-r border-b border-slate-100 p-0.5 sm:p-1.5">
+        <div className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full mx-auto ${isToday ? "bg-orange-500 text-white" : "text-slate-500"}`}>{day}</div>
         <div className="space-y-0.5">
           {events.map((ev, ei) => {
             const colors = supplierColorMap.get(ev.supplier) ?? CAL_PALETTE[0];
             if (ev.type === "order") {
               return (
-                <div key={ei} className={`${colors.order} text-xs rounded px-2 py-0.5 truncate leading-5`}>
+                <div key={ei} className={`${colors.order} text-[9px] sm:text-xs rounded px-1 sm:px-2 py-0.5 truncate leading-4 sm:leading-5`}>
                   {supplierShort(ev.supplier)}
                 </div>
               );
             }
             return (
               <button key={ei} onClick={() => setSelectedEvent({ ...ev, deliveryDate: ymd })}
-                className={`${colors.delivery} w-full text-xs rounded px-2 py-0.5 truncate leading-5 cursor-pointer hover:opacity-85 active:opacity-75 transition-opacity text-left`}>
+                className={`${colors.delivery} w-full text-[9px] sm:text-xs rounded px-1 sm:px-2 py-0.5 truncate leading-4 sm:leading-5 cursor-pointer hover:opacity-85 active:opacity-75 transition-opacity text-left`}>
                 {supplierShort(ev.supplier)}
               </button>
             );
@@ -172,10 +173,15 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
 
   return (
     <>
-      <div className="overflow-x-auto -mx-4 md:mx-0 mb-6">
-      <div className="min-w-[480px] mx-4 md:mx-0 bg-white rounded-xl border border-slate-100 shadow-sm">
+      <div className="mb-6">
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="grid grid-cols-7 border-b border-slate-100">
-          {DOW_NAMES.map(d => <div key={d} className="text-center text-xs text-slate-400 py-2 font-medium">{d}</div>)}
+          {DOW_NAMES.map((d, i) => (
+            <div key={i} className="text-center text-xs text-slate-400 py-2 font-medium">
+              <span className="hidden sm:inline">{d}</span>
+              <span className="sm:hidden">{DOW_NAMES_SHORT[i]}</span>
+            </div>
+          ))}
         </div>
         {[0, 1].map(w => (
           <div key={w}>
@@ -199,7 +205,6 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
         </div>
       </div>
       </div>
-
       {selectedEvent && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedEvent(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>

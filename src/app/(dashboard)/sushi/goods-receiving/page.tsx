@@ -1,15 +1,17 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Upload, Loader2, CheckCircle2, AlertTriangle, ExternalLink, RotateCcw, Package } from "lucide-react";
+import { Upload, Loader2, CheckCircle2, AlertTriangle, ExternalLink, RotateCcw, Package, Copy, Check, Camera } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
 const OSS_BASE = "https://oss.spientsyserv.com";
+const OSS_GR_URL = `${OSS_BASE}/shop/home/goodsreceiving_view`;
 
-interface InvoiceItem { code: string | null; name: string; quantity: number; unit: string; }
+interface InvoiceItem { code: string | null; name: string; cartonsOrdered: number; cartonsDelivered: number; quantity: number; unit: string; }
 interface OrderItem { id: string; itemCode: string; itemName: string; quantity: number; uom: string; }
 interface InvoiceData {
   poNumber: string | null;
+  invoiceNumber: string | null;
   supplierName: string | null;
   deliveryDate: string | null;
   items: InvoiceItem[];
@@ -68,6 +70,7 @@ function buildComparison(order: MatchedOrder, invoice: InvoiceData): CompareRow[
 export default function GoodsReceivingPage() {
   const { lang } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -76,6 +79,14 @@ export default function GoodsReceivingPage() {
   const [invoice, setInvoice] = useState<InvoiceData | null>(null);
   const [order, setOrder] = useState<MatchedOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  function copyInvoiceNo(val: string) {
+    navigator.clipboard.writeText(val).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   function readFile(file: File) {
     const mt = file.type || "image/jpeg";
@@ -137,11 +148,7 @@ export default function GoodsReceivingPage() {
   const comparison = invoice && order ? buildComparison(order, invoice) : null;
   const allFull = comparison?.every(r => r.match === "full");
 
-  const ossUrl = order
-    ? order.ossId.startsWith("virtual-") && order.poNumber
-      ? `${OSS_BASE}/shop/${order.poNumber}`
-      : `${OSS_BASE}/shop/goodsreceiving`
-    : `${OSS_BASE}/shop/home/module_list`;
+  const ossUrl = order ? OSS_GR_URL : `${OSS_BASE}/shop/home/module_list`;
 
   return (
     <div className="p-4 md:p-8">
@@ -173,7 +180,25 @@ export default function GoodsReceivingPage() {
           <Upload size={36} className="mx-auto text-slate-300 mb-3" />
           <p className="text-slate-600 font-medium mb-1">{lang === "en" ? "Drop invoice image here" : "拖拽发票图片到这里"}</p>
           <p className="text-slate-400 text-sm">{lang === "en" ? "or click to select · JPG, PNG, WEBP" : "或点击选择文件 · JPG、PNG、WEBP"}</p>
+          <div className="flex items-center justify-center gap-3 mt-5" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium shadow-sm transition-colors"
+            >
+              <Upload size={15} />
+              {lang === "en" ? "Choose File" : "选择文件"}
+            </button>
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium shadow-sm transition-colors"
+            >
+              <Camera size={15} />
+              {lang === "en" ? "Take Photo" : "拍照"}
+            </button>
+          </div>
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
         </div>
       )}
@@ -206,10 +231,35 @@ export default function GoodsReceivingPage() {
           {/* Invoice summary */}
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
             <h2 className="font-semibold text-slate-700 mb-3 text-sm">{lang === "en" ? "Extracted from Invoice" : "从发票识别到的信息"}</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            {invoice.invoiceNumber && (
+              <div className="flex items-center gap-2 mb-3 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-orange-500 font-medium">Invoice No. <span className="text-slate-400 font-normal">({lang === "en" ? "enter this in OSS confirmation" : "填入 OSS 确认单"})</span></p>
+                  <p className="font-bold text-slate-800 text-base tracking-wide">{invoice.invoiceNumber}</p>
+                </div>
+                <button
+                  onClick={() => copyInvoiceNo(invoice.invoiceNumber!)}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md bg-white border border-orange-200 text-orange-600 hover:bg-orange-50 transition-colors flex-shrink-0"
+                >
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  {copied ? (lang === "en" ? "Copied" : "已复制") : (lang === "en" ? "Copy" : "复制")}
+                </button>
+              </div>
+            )}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-4">
               <div>
                 <p className="text-xs text-slate-400 mb-0.5">PO #</p>
-                <p className="font-semibold text-slate-800">{invoice.poNumber ?? "—"}</p>
+                {invoice.poNumber ? (
+                  <a
+                    href={OSS_GR_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2 flex items-center gap-1"
+                  >
+                    {invoice.poNumber}
+                    <ExternalLink size={11} className="flex-shrink-0" />
+                  </a>
+                ) : <p className="font-semibold text-slate-800">—</p>}
               </div>
               <div>
                 <p className="text-xs text-slate-400 mb-0.5">{lang === "en" ? "Supplier" : "供应商"}</p>
@@ -224,6 +274,25 @@ export default function GoodsReceivingPage() {
                 <p className="font-semibold text-slate-800">{invoice.items.length}</p>
               </div>
             </div>
+            {invoice.items.length > 0 && (
+              <div className="border-t border-slate-100 pt-3">
+                <p className="text-xs text-slate-400 mb-2">{lang === "en" ? "Recognised items" : "识别到的商品"}</p>
+                <div className="space-y-1">
+                  {invoice.items.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-slate-50 last:border-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {item.code && <span className="text-slate-400 font-mono flex-shrink-0">{item.code}</span>}
+                        <span className="text-slate-700 truncate">{item.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0 ml-2 text-slate-500">
+                        {item.cartonsDelivered > 0 && <span>{item.cartonsDelivered} CTN</span>}
+                        {item.quantity > 0 && <span className="font-medium text-slate-700">{item.quantity} {item.unit}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Order match */}
