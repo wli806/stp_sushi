@@ -10,7 +10,15 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(Get-ChildItem -Path 'd:\\\\0-develop\\\\1-code\\\\stp_sushi' -Recurse -Directory)",
+      "Bash(Select-Object -First 30)",
+      "Bash(mkdir -p \"d:/0-develop/1-code/stp_sushi/src/app/api/training/staff/[id]/records/[rid]\")",
+      "Bash(mkdir -p \"d:/0-develop/1-code/stp_sushi/src/app/api/training/staff/[id]/checklist\")",
+      "Bash(mkdir -p \"d:/0-develop/1-code/stp_sushi/src/app/\\(dashboard\\)/training/[id]\")"
+    ],
+    "additionalDirectories": [
+      "d:\\0-develop\\1-code\\stp_sushi\\src\\app\\(dashboard)\\training"
     ]
   }
 }

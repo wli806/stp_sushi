@@ -60,3 +60,44 @@ model ActivityLog {
   detail    String?
   createdAt DateTime @default(now())
 }
+
+model TrainingStaff {
+  id          String   @id @default(cuid())
+  name        String
+  position    String   @default("Sushi Staff")
+  store       String   @default("")
+  trainerName String   @default("")
+  startDate   String
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  records   TrainingRecord[]
+  checklist TrainingChecklist[]
+}
+
+model TrainingRecord {
+  id                  String   @id @default(cuid())
+  staffId             String
+  date                String
+  type                String
+  areaForImprovement  String
+  feedbackActionTaken String
+  followUpNeeded      String
+  createdByUsername   String   @default("")
+  createdByRole       String   @default("")
+  createdAt           DateTime @default(now())
+
+  staff TrainingStaff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+}
+
+model TrainingChecklist {
+  id          String @id @default(cuid())
+  staffId     String
+  taskKey     String
+  completedAt String @default("")
+  trainerName String @default("")
+
+  staff TrainingStaff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, taskKey])
+}

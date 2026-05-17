@@ -12,6 +12,7 @@ import {
   UtensilsCrossed,
   Boxes,
   CalendarClock,
+  GraduationCap,
   ChevronDown,
   Menu,
   X,
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
       { href: "/sushi/inventory",   labelKey: "sidebar.inventory",   icon: Boxes },
     ],
   },
+  { href: "/training", labelKey: "sidebar.training", icon: GraduationCap, roles: ["OWNER", "MANAGER", "VIEWER"] },
   { href: "/settings", labelKey: "sidebar.users", icon: Settings, roles: ["OWNER"], rootOnly: true },
 ];
 
