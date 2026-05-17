@@ -86,8 +86,8 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
         if (!ev) { ev = { type, supplier, relatedDates: [] }; evs.push(ev); map.set(k, evs); }
         if (related && !ev.relatedDates.includes(related)) ev.relatedDates.push(related);
       };
-      if (orderYMD) upsert(orderYMD, "order", deliveryYMD);
-      if (deliveryYMD) upsert(deliveryYMD, "delivery", orderYMD);
+      if (orderYMD) upsert(orderYMD, "order", o.status >= 2 ? deliveryYMD : null);
+      if (deliveryYMD && o.status >= 2) upsert(deliveryYMD, "delivery", orderYMD);
     }
     return map;
   }, [orders]);
