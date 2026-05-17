@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Plus, Pencil, Trash2, GraduationCap, ClipboardList } from "lucide-react";
+import { ChevronLeft, Plus, Trash2, GraduationCap, ClipboardList } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
 // ── Checklist definition ──────────────────────────────────────────────────────
@@ -68,14 +68,38 @@ interface TrainingRecord {
   areaForImprovement: string; feedbackActionTaken: string; followUpNeeded: string;
   createdByRole: string; createdByUsername: string;
 }
+interface TrainingChecklistItem {
+  taskKey: string; status: string;
+}
 interface StaffDetail {
   id: string; name: string; position: string; store: string;
   trainerName: string; startDate: string; notes: string | null;
   records: TrainingRecord[];
+  checklist: TrainingChecklistItem[];
 }
 
 const RECORD_TYPES = ["Feedback", "Retraining", "Observation", "Warning"];
 const EMPTY_FORM = { date: "", type: "Feedback", areaForImprovement: "", feedbackActionTaken: "", followUpNeeded: "" };
+
+// ── Status helpers ─────────────────────────────────────────────────────────────
+type TaskStatus = "pass" | "partial" | "fail" | "";
+
+const STATUS_CONFIG: Record<string, { labelZh: string; labelEn: string; active: string; inactive: string }> = {
+  pass:    { labelZh: "通过",   labelEn: "Pass",    active: "bg-green-500 text-white",  inactive: "border border-green-300 text-green-600 hover:bg-green-50" },
+  partial: { labelZh: "部分",   labelEn: "Partial", active: "bg-amber-400 text-white",  inactive: "border border-amber-300 text-amber-600 hover:bg-amber-50" },
+  fail:    { labelZh: "不通过", labelEn: "Fail",    active: "bg-red-500 text-white",    inactive: "border border-red-300 text-red-500 hover:bg-red-50" },
+};
+
+function StatusBadge({ status, lang }: { status: string; lang: string }) {
+  if (!status) return null;
+  const cfg = STATUS_CONFIG[status];
+  if (!cfg) return null;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cfg.active}`}>
+      {lang === "en" ? cfg.labelEn : cfg.labelZh}
+    </span>
+  );
+}
 
 function roleBorder(role: string) {
   if (role === "OWNER") return "border-l-orange-500";
@@ -102,7 +126,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-function RecordCard({ r, onEdit, onDelete }: { r: TrainingRecord; onEdit?: () => void; onDelete: () => void }) {
+function RecordCard({ r, onDelete }: { r: TrainingRecord; onDelete: () => void }) {
   const { t } = useLanguage();
   return (
     <div className={`bg-white rounded-xl border border-slate-100 shadow-sm border-l-4 ${roleBorder(r.createdByRole)} p-4`}>
@@ -121,10 +145,9 @@ function RecordCard({ r, onEdit, onDelete }: { r: TrainingRecord; onEdit?: () =>
             <p><span className="text-slate-400 text-xs">{t("training.record.followUp")}</span> <span className="text-slate-700">{r.followUpNeeded}</span></p>
           </div>
         </div>
-        <div className="flex gap-1 flex-shrink-0">
-          {onEdit && <button onClick={onEdit} className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Pencil size={13} /></button>}
-          <button onClick={onDelete} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={13} /></button>
-        </div>
+        <button onClick={onDelete} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
+          <Trash2 size={13} />
+        </button>
       </div>
     </div>
   );
@@ -185,19 +208,15 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
   const router = useRouter();
   const [staff, setStaff] = useState<StaffDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"records" | "checklist">("records");
-
-  // General records modal
-  const [showRecordModal, setShowRecordModal] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<TrainingRecord | null>(null);
-  const [recordForm, setRecordForm] = useState({ ...EMPTY_FORM });
-  const [savingRecord, setSavingRecord] = useState(false);
 
   // Task records modal
   const [taskModal, setTaskModal] = useState<{ key: string; label: string } | null>(null);
   const [showAddTaskRecord, setShowAddTaskRecord] = useState(false);
   const [taskRecordForm, setTaskRecordForm] = useState({ ...EMPTY_FORM });
   const [savingTaskRecord, setSavingTaskRecord] = useState(false);
+
+  // Status updating
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -207,7 +226,6 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
   }
   useEffect(() => { load(); }, [id]);
 
-  const generalRecords = (staff?.records ?? []).filter(r => !r.taskKey);
   const taskRecordsMap = new Map<string, TrainingRecord[]>();
   (staff?.records ?? []).forEach(r => {
     if (r.taskKey) {
@@ -216,39 +234,21 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
       taskRecordsMap.set(r.taskKey, arr);
     }
   });
-  const tasksWithRecords = taskRecordsMap.size;
 
-  // ── General record actions ──────────────────────────────────────────────────
-  function openAddRecord() { setEditingRecord(null); setRecordForm({ ...EMPTY_FORM }); setShowRecordModal(true); }
-  function openEditRecord(r: TrainingRecord) {
-    setEditingRecord(r);
-    setRecordForm({ date: r.date, type: r.type, areaForImprovement: r.areaForImprovement, feedbackActionTaken: r.feedbackActionTaken, followUpNeeded: r.followUpNeeded });
-    setShowRecordModal(true);
-  }
+  const statusMap = new Map<string, string>();
+  (staff?.checklist ?? []).forEach(c => { if (c.status) statusMap.set(c.taskKey, c.status); });
 
-  async function handleSaveRecord() {
-    const { date, type, areaForImprovement, feedbackActionTaken, followUpNeeded } = recordForm;
-    if (!date || !areaForImprovement || !feedbackActionTaken || !followUpNeeded) return;
-    setSavingRecord(true);
-    if (editingRecord) {
-      await fetch(`/api/training/staff/${id}/records/${editingRecord.id}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(recordForm),
-      });
-    } else {
-      await fetch(`/api/training/staff/${id}/records`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, type, areaForImprovement, feedbackActionTaken, followUpNeeded }),
-      });
-    }
-    setSavingRecord(false);
-    setShowRecordModal(false);
-    load();
-  }
+  const passCount = [...statusMap.values()].filter(s => s === "pass").length;
 
-  async function handleDeleteRecord(recordId: string) {
-    if (!confirm(t("training.confirmDeleteRecord"))) return;
-    await fetch(`/api/training/staff/${id}/records/${recordId}`, { method: "DELETE" });
+  async function handleSetStatus(taskKey: string, status: TaskStatus) {
+    setUpdatingStatus(taskKey);
+    const current = statusMap.get(taskKey) ?? "";
+    const next = current === status ? "" : status;
+    await fetch(`/api/training/staff/${id}/checklist`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskKey, status: next }),
+    });
+    setUpdatingStatus(null);
     load();
   }
 
@@ -265,6 +265,12 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
     setSavingTaskRecord(false);
     setShowAddTaskRecord(false);
     setTaskRecordForm({ ...EMPTY_FORM });
+    load();
+  }
+
+  async function handleDeleteRecord(recordId: string) {
+    if (!confirm(t("training.confirmDeleteRecord"))) return;
+    await fetch(`/api/training/staff/${id}/records/${recordId}`, { method: "DELETE" });
     load();
   }
 
@@ -289,93 +295,72 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-lg p-1 mb-6 w-fit">
-        {(["records", "checklist"] as const).map(tb => (
-          <button key={tb} onClick={() => setTab(tb)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === tb ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-            {t(tb === "records" ? "training.tab.records" : "training.tab.checklist")}
-            {tb === "checklist" && <span className="ml-1.5 text-xs text-orange-500">{tasksWithRecords}/{TOTAL_TASKS}</span>}
-          </button>
-        ))}
+      {/* Progress */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 mb-5">
+        <div className="flex items-center justify-between text-sm mb-2">
+          <span className="font-medium text-slate-700">{t("training.checklist.progress")}</span>
+          <span className={`font-bold ${passCount === TOTAL_TASKS ? "text-green-600" : "text-orange-500"}`}>{passCount}/{TOTAL_TASKS}</span>
+        </div>
+        <div className="w-full bg-slate-100 rounded-full h-2">
+          <div className={`h-2 rounded-full transition-all ${passCount === TOTAL_TASKS ? "bg-green-500" : "bg-orange-400"}`}
+            style={{ width: `${Math.round((passCount / TOTAL_TASKS) * 100)}%` }} />
+        </div>
+        <div className="flex gap-4 mt-3 text-xs text-slate-400">
+          <span><span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-1"></span>{lang === "en" ? "Pass" : "通过"} {[...statusMap.values()].filter(s => s === "pass").length}</span>
+          <span><span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>{lang === "en" ? "Partial" : "部分通过"} {[...statusMap.values()].filter(s => s === "partial").length}</span>
+          <span><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1"></span>{lang === "en" ? "Fail" : "不通过"} {[...statusMap.values()].filter(s => s === "fail").length}</span>
+        </div>
       </div>
 
-      {/* ── Tab: General Records ─────────────────────────────────────────────── */}
-      {tab === "records" && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-slate-500">{t("training.record.subtitle")}</p>
-            <button onClick={openAddRecord}
-              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
-              <Plus size={14} /> {t("training.record.add")}
-            </button>
+      {/* Checklist areas */}
+      {CHECKLIST_AREAS.map(area => (
+        <div key={area.key} className="bg-white rounded-xl border border-slate-100 shadow-sm mb-4 overflow-hidden">
+          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
+            <h3 className="font-semibold text-slate-700 text-sm">{lang === "en" ? area.labelEn : area.labelZh}</h3>
           </div>
-          {generalRecords.length === 0 ? (
-            <div className="bg-white rounded-xl p-12 text-center text-slate-400">{t("training.record.noData")}</div>
-          ) : (
-            <div className="space-y-3">
-              {generalRecords.map(r => (
-                <RecordCard key={r.id} r={r} onEdit={() => openEditRecord(r)} onDelete={() => handleDeleteRecord(r.id)} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Tab: Checklist ───────────────────────────────────────────────────── */}
-      {tab === "checklist" && (
-        <div>
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 mb-5">
-            <div className="flex items-center justify-between text-sm mb-2">
-              <span className="font-medium text-slate-700">{t("training.checklist.progress")}</span>
-              <span className={`font-bold ${tasksWithRecords === TOTAL_TASKS ? "text-green-600" : "text-orange-500"}`}>{tasksWithRecords}/{TOTAL_TASKS}</span>
-            </div>
-            <div className="w-full bg-slate-100 rounded-full h-2">
-              <div className={`h-2 rounded-full transition-all ${tasksWithRecords === TOTAL_TASKS ? "bg-green-500" : "bg-orange-400"}`}
-                style={{ width: `${Math.round((tasksWithRecords / TOTAL_TASKS) * 100)}%` }} />
-            </div>
+          <div className="divide-y divide-slate-50">
+            {area.tasks.map(task => {
+              const taskRecords = taskRecordsMap.get(task.key) ?? [];
+              const hasRecords = taskRecords.length > 0;
+              const currentStatus = statusMap.get(task.key) ?? "";
+              const isUpdating = updatingStatus === task.key;
+              return (
+                <div key={task.key} className="px-4 py-3">
+                  {/* Task name + status badge */}
+                  <div className="flex items-start gap-2 mb-2">
+                    <p className="text-sm text-slate-700 flex-1 leading-snug">{task.labelEn}</p>
+                    <StatusBadge status={currentStatus} lang={lang} />
+                  </div>
+                  {/* Controls row */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Status buttons */}
+                    {(["pass", "partial", "fail"] as const).map(s => {
+                      const cfg = STATUS_CONFIG[s];
+                      const isActive = currentStatus === s;
+                      return (
+                        <button
+                          key={s}
+                          disabled={isUpdating}
+                          onClick={() => handleSetStatus(task.key, s)}
+                          className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors disabled:opacity-50 ${isActive ? cfg.active : cfg.inactive}`}>
+                          {lang === "en" ? cfg.labelEn : cfg.labelZh}
+                        </button>
+                      );
+                    })}
+                    {/* Records button */}
+                    <button
+                      onClick={() => { setTaskModal({ key: task.key, label: task.labelEn }); setShowAddTaskRecord(false); }}
+                      className={`ml-auto flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-colors flex-shrink-0 ${hasRecords ? "bg-orange-50 text-orange-600 hover:bg-orange-100 font-medium" : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"}`}>
+                      <ClipboardList size={12} />
+                      {hasRecords ? `${taskRecords.length} ${lang === "en" ? "record(s)" : "条记录"}` : (lang === "en" ? "Records" : "记录")}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-
-          {CHECKLIST_AREAS.map(area => (
-            <div key={area.key} className="bg-white rounded-xl border border-slate-100 shadow-sm mb-4 overflow-hidden">
-              <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
-                <h3 className="font-semibold text-slate-700 text-sm">{lang === "en" ? area.labelEn : area.labelZh}</h3>
-              </div>
-              <div className="divide-y divide-slate-50">
-                {area.tasks.map(task => {
-                  const taskRecords = taskRecordsMap.get(task.key) ?? [];
-                  const hasRecords = taskRecords.length > 0;
-                  return (
-                    <div key={task.key} className="flex items-center gap-3 px-4 py-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-700">{task.labelEn}</p>
-                        {hasRecords && (
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            {taskRecords[taskRecords.length - 1].date} · {taskRecords.length} {lang === "en" ? "record(s)" : "条记录"}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => { setTaskModal({ key: task.key, label: task.labelEn }); setShowAddTaskRecord(false); }}
-                        className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-colors flex-shrink-0 ${hasRecords ? "bg-orange-50 text-orange-600 hover:bg-orange-100 font-medium" : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"}`}>
-                        <ClipboardList size={13} />
-                        {hasRecords ? taskRecords.length : (lang === "en" ? "Records" : "记录")}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
         </div>
-      )}
-
-      {/* ── General Record Modal ─────────────────────────────────────────────── */}
-      {showRecordModal && (
-        <Modal title={editingRecord ? t("training.record.edit") : t("training.record.add")} onClose={() => setShowRecordModal(false)}>
-          <RecordForm form={recordForm} setForm={setRecordForm} onSave={handleSaveRecord} onCancel={() => setShowRecordModal(false)} saving={savingRecord} />
-        </Modal>
-      )}
+      ))}
 
       {/* ── Task Records Modal ───────────────────────────────────────────────── */}
       {taskModal && (

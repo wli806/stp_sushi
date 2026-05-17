@@ -95,6 +95,7 @@ model TrainingChecklist {
   id          String @id @default(cuid())
   staffId     String
   taskKey     String
+  status      String @default("") // "pass" | "partial" | "fail" | ""
   completedAt String @default("")
   trainerName String @default("")
 
