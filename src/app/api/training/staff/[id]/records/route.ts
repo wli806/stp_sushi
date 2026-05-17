@@ -13,6 +13,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const record = await prisma.trainingRecord.create({
       data: {
         staffId,
+        taskKey: data.taskKey ?? "",
         date: data.date,
         type: data.type,
         areaForImprovement: data.areaForImprovement,

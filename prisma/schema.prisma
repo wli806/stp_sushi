@@ -78,6 +78,7 @@ model TrainingStaff {
 model TrainingRecord {
   id                  String   @id @default(cuid())
   staffId             String
+  taskKey             String   @default("")
   date                String
   type                String
   areaForImprovement  String
