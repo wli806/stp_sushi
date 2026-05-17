@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { RefreshCw, UtensilsCrossed, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Package, PackagePlus, AlertCircle, CheckCircle2 } from "lucide-react";
+import { RefreshCw, UtensilsCrossed, ChevronDown, ChevronUp, Package, PackagePlus, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useLanguage } from "@/components/LanguageProvider";
 import { format } from "date-fns";
@@ -36,7 +36,7 @@ function parseToYMD(s: string): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
-interface DayEvent { type: "order" | "delivery"; supplier: string; relatedDates: string[]; }
+interface DayEvent { type: "order" | "delivery"; supplier: string; relatedDate: string | null; pairKey: string; }
 
 const CAL_PALETTE = [
   { order: "bg-blue-100 text-blue-700", delivery: "bg-blue-500 text-white", ring: "ring-blue-500", dot: "bg-blue-500" },
@@ -60,10 +60,9 @@ function fmtYMD(ymd: string, lang: string): string {
 function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
   const { lang, t } = useLanguage();
   const now = new Date();
-  const [cal, setCal] = useState({ year: now.getFullYear(), month: now.getMonth() });
-  const [hoveredSupplier, setHoveredSupplier] = useState<string | null>(null);
+  const todayKey = now.toISOString().slice(0, 10);
+  const [hoveredPairKey, setHoveredPairKey] = useState<string | null>(null);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-  const MONTH_NAMES = lang === "en" ? MONTH_NAMES_EN : MONTH_NAMES_ZH;
   const DOW_NAMES = lang === "en" ? DOW_EN : DOW_ZH;
 
   const supplierColorMap = useMemo(() => {
@@ -80,97 +79,113 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
       const supplier = o.supplierName || "Unknown";
       const orderYMD = o.orderDate ? parseToYMD(o.orderDate) : null;
       const deliveryYMD = o.deliveryDate ? parseToYMD(o.deliveryDate) : null;
-      const upsert = (k: string, type: "order" | "delivery", related: string | null) => {
-        const evs = map.get(k) ?? [];
-        let ev = evs.find(e => e.type === type && e.supplier === supplier);
-        if (!ev) { ev = { type, supplier, relatedDates: [] }; evs.push(ev); map.set(k, evs); }
-        if (related && !ev.relatedDates.includes(related)) ev.relatedDates.push(related);
-      };
-      if (orderYMD) upsert(orderYMD, "order", o.status >= 2 ? deliveryYMD : null);
-      if (deliveryYMD && o.status >= 2) upsert(deliveryYMD, "delivery", orderYMD);
+      const pairKey = o.id;
+      if (orderYMD) {
+        const evs = map.get(orderYMD) ?? [];
+        evs.push({ type: "order", supplier, relatedDate: o.status >= 2 ? deliveryYMD : null, pairKey });
+        map.set(orderYMD, evs);
+      }
+      if (deliveryYMD && o.status >= 2) {
+        const evs = map.get(deliveryYMD) ?? [];
+        evs.push({ type: "delivery", supplier, relatedDate: orderYMD, pairKey });
+        map.set(deliveryYMD, evs);
+      }
     }
     return map;
   }, [orders]);
 
-  const cells = useMemo(() => {
-    const first = new Date(cal.year, cal.month, 1);
-    const daysInMonth = new Date(cal.year, cal.month + 1, 0).getDate();
-    const startDow = (first.getDay() + 6) % 7;
-    const result: Array<number | null> = Array(startDow).fill(null);
-    for (let d = 1; d <= daysInMonth; d++) result.push(d);
-    while (result.length % 7 !== 0) result.push(null);
-    return result;
-  }, [cal]);
+  // 本周一开始的 14 天（本周 + 下周）
+  const twoWeekDays = useMemo(() => {
+    const dow = now.getDay();
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+    const days: string[] = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      days.push(d.toISOString().slice(0, 10));
+    }
+    return days;
+  }, []);
 
-  const todayKey = now.toISOString().slice(0, 10);
-  const monthLabel = lang === "en"
-    ? `${MONTH_NAMES[cal.month]} ${cal.year}`
-    : `${cal.year}年 ${MONTH_NAMES[cal.month]}`;
+  function weekRangeLabel(days: string[]): string {
+    const [, m1, d1] = days[0].split("-");
+    const [, m2, d2] = days[6].split("-");
+    if (lang === "en") return `${MONTH_NAMES_EN[parseInt(m1)-1]} ${parseInt(d1)} – ${MONTH_NAMES_EN[parseInt(m2)-1]} ${parseInt(d2)}`;
+    return `${parseInt(m1)}月${parseInt(d1)}日 – ${parseInt(m2)}月${parseInt(d2)}日`;
+  }
+
+  function renderCell(ymd: string) {
+    const day = parseInt(ymd.split("-")[2]);
+    const events = dayMap.get(ymd) ?? [];
+    const isToday = ymd === todayKey;
+    const MAX_VISIBLE = 4;
+    const isExpanded = expandedDays.has(ymd);
+    const visibleEvents = events.length > MAX_VISIBLE && !isExpanded ? events.slice(0, MAX_VISIBLE) : events;
+    const hiddenCount = events.length - MAX_VISIBLE;
+    return (
+      <div key={ymd} className="min-h-[72px] md:min-h-[100px] border-r border-b border-slate-100 p-1.5">
+        <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full mx-auto ${isToday ? "bg-orange-500 text-white" : "text-slate-500"}`}>{day}</div>
+        <div className="space-y-0.5">
+          {visibleEvents.map((ev, ei) => {
+            const colors = supplierColorMap.get(ev.supplier) ?? CAL_PALETTE[0];
+            const isActive = hoveredPairKey === ev.pairKey;
+            const isDimmed = hoveredPairKey !== null && !isActive;
+            const tooltipText = ev.type === "order"
+              ? (ev.relatedDate ? t("orders.tooltipDelivery", { dates: fmtYMD(ev.relatedDate, lang) }) : t("orders.tooltipNoDelivery"))
+              : (ev.relatedDate ? t("orders.tooltipOrder", { dates: fmtYMD(ev.relatedDate, lang) }) : t("orders.tooltipNoOrder"));
+            return (
+              <div key={ei} className="relative group/chip" onMouseEnter={() => setHoveredPairKey(ev.pairKey)} onMouseLeave={() => setHoveredPairKey(null)}>
+                <div className={[ev.type === "order" ? colors.order : colors.delivery, "text-xs rounded px-2 py-0.5 truncate leading-5 cursor-default transition-all", isActive ? `ring-2 ring-offset-1 ${colors.ring} shadow-md font-semibold` : "", isDimmed ? "opacity-20" : ""].join(" ")}>
+                  {ev.type === "order" ? t("orders.orderLabel") : t("orders.deliveryLabel")}{supplierShort(ev.supplier)}
+                </div>
+                <div className="absolute bottom-full left-0 mb-1 z-50 hidden group-hover/chip:block pointer-events-none">
+                  <div className="bg-slate-800 text-white rounded-lg px-3 py-2 shadow-xl text-[11px] leading-5 min-w-max max-w-[220px]">
+                    <div className="font-semibold truncate">{ev.supplier}</div>
+                    <div className="text-slate-300">{tooltipText}</div>
+                  </div>
+                  <div className="w-2 h-2 bg-slate-800 rotate-45 ml-3 -mt-1" />
+                </div>
+              </div>
+            );
+          })}
+          {events.length > MAX_VISIBLE && !isExpanded && (
+            <button onClick={() => setExpandedDays(prev => { const next = new Set(prev); next.add(ymd); return next; })}
+              className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 leading-4 pt-0.5">
+              +{hiddenCount} {lang === "en" ? "more" : "更多"}
+            </button>
+          )}
+          {events.length > MAX_VISIBLE && isExpanded && (
+            <button onClick={() => setExpandedDays(prev => { const next = new Set(prev); next.delete(ymd); return next; })}
+              className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 leading-4 pt-0.5">
+              {lang === "en" ? "collapse" : "收起"}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm mb-6">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-        <button onClick={() => setCal(c => { const d = new Date(c.year, c.month - 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
-          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"><ChevronLeft size={16} /></button>
-        <span className="font-semibold text-slate-700">{monthLabel}</span>
-        <button onClick={() => setCal(c => { const d = new Date(c.year, c.month + 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
-          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"><ChevronRight size={16} /></button>
-      </div>
       <div className="grid grid-cols-7 border-b border-slate-100">
         {DOW_NAMES.map(d => <div key={d} className="text-center text-xs text-slate-400 py-2 font-medium">{d}</div>)}
       </div>
+      <div className="px-4 py-1.5 bg-orange-50 border-b border-slate-100 text-xs font-medium text-orange-600 flex items-center gap-2">
+        <span>{lang === "en" ? "This week" : "本周"}</span>
+        <span className="font-normal text-orange-400">{weekRangeLabel(twoWeekDays.slice(0, 7))}</span>
+      </div>
       <div className="grid grid-cols-7 border-l border-slate-100">
-        {cells.map((day, i) => {
-          if (!day) return <div key={i} className="min-h-[72px] md:min-h-[100px] border-r border-b border-slate-100 bg-slate-50/60" />;
-          const key = `${cal.year}-${String(cal.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          const events = dayMap.get(key) ?? [];
-          const isToday = key === todayKey;
-          const MAX_VISIBLE = 4;
-          const isExpanded = expandedDays.has(key);
-          const visibleEvents = events.length > MAX_VISIBLE && !isExpanded ? events.slice(0, MAX_VISIBLE) : events;
-          const hiddenCount = events.length - MAX_VISIBLE;
-          return (
-            <div key={i} className="relative min-h-[72px] md:min-h-[100px] border-r border-b border-slate-100 p-1.5">
-              <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full mx-auto ${isToday ? "bg-orange-500 text-white" : "text-slate-500"}`}>{day}</div>
-              <div className="space-y-0.5">
-                {visibleEvents.map((ev, ei) => {
-                  const colors = supplierColorMap.get(ev.supplier) ?? CAL_PALETTE[0];
-                  const isActive = hoveredSupplier === ev.supplier;
-                  const isDimmed = hoveredSupplier !== null && !isActive;
-                  const tooltipText = ev.type === "order"
-                    ? (ev.relatedDates.length > 0 ? t("orders.tooltipDelivery", { dates: ev.relatedDates.map(d => fmtYMD(d, lang)).join("、") }) : t("orders.tooltipNoDelivery"))
-                    : (ev.relatedDates.length > 0 ? t("orders.tooltipOrder", { dates: ev.relatedDates.map(d => fmtYMD(d, lang)).join("、") }) : t("orders.tooltipNoOrder"));
-                  return (
-                    <div key={ei} className="relative group/chip" onMouseEnter={() => setHoveredSupplier(ev.supplier)} onMouseLeave={() => setHoveredSupplier(null)}>
-                      <div className={[ev.type === "order" ? colors.order : colors.delivery, "text-xs rounded px-2 py-0.5 truncate leading-5 cursor-default transition-all", isActive ? `ring-2 ring-offset-1 ${colors.ring} shadow-md font-semibold` : "", isDimmed ? "opacity-20" : ""].join(" ")}>
-                        {ev.type === "order" ? t("orders.orderLabel") : t("orders.deliveryLabel")}{supplierShort(ev.supplier)}
-                      </div>
-                      <div className="absolute bottom-full left-0 mb-1 z-50 hidden group-hover/chip:block pointer-events-none">
-                        <div className="bg-slate-800 text-white rounded-lg px-3 py-2 shadow-xl text-[11px] leading-5 min-w-max max-w-[220px]">
-                          <div className="font-semibold truncate">{ev.supplier}</div>
-                          <div className="text-slate-300">{tooltipText}</div>
-                        </div>
-                        <div className="w-2 h-2 bg-slate-800 rotate-45 ml-3 -mt-1" />
-                      </div>
-                    </div>
-                  );
-                })}
-                {events.length > MAX_VISIBLE && !isExpanded && (
-                  <button onClick={() => setExpandedDays(prev => { const next = new Set(prev); next.add(key); return next; })}
-                    className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 leading-4 pt-0.5">
-                    +{hiddenCount} {lang === "en" ? "more" : "更多"}
-                  </button>
-                )}
-                {events.length > MAX_VISIBLE && isExpanded && (
-                  <button onClick={() => setExpandedDays(prev => { const next = new Set(prev); next.delete(key); return next; })}
-                    className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 leading-4 pt-0.5">
-                    {lang === "en" ? "collapse" : "收起"}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {twoWeekDays.slice(0, 7).map(ymd => renderCell(ymd))}
+      </div>
+      <div className="px-4 py-1.5 bg-slate-50 border-y border-slate-100 text-xs font-medium text-slate-500 flex items-center gap-2">
+        <span>{lang === "en" ? "Next week" : "下周"}</span>
+        <span className="font-normal text-slate-400">{weekRangeLabel(twoWeekDays.slice(7, 14))}</span>
+      </div>
+      <div className="grid grid-cols-7 border-l border-slate-100">
+        {twoWeekDays.slice(7, 14).map(ymd => renderCell(ymd))}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 py-3 border-t border-slate-100">
         {[...supplierColorMap.entries()].map(([supplier, colors]) => (
