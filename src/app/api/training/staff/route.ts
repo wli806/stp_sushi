@@ -7,7 +7,7 @@ export async function GET() {
     await requireAuth();
     const staff = await prisma.trainingStaff.findMany({
       orderBy: { createdAt: "desc" },
-      include: { _count: { select: { checklist: true } } },
+      include: { _count: { select: { checklist: { where: { status: "pass" } } } } },
     });
     return NextResponse.json(staff);
   } catch {

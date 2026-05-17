@@ -116,32 +116,31 @@ export default function TrainingPage() {
             const progress = s._count.checklist;
             const pct = Math.round((progress / TOTAL_TASKS) * 100);
             return (
-              <div key={s.id} onClick={() => router.push(`/training/${s.id}`)}
-                className="bg-white rounded-xl border border-slate-100 shadow-sm p-5 cursor-pointer hover:shadow-md hover:border-orange-200 transition-all group">
+              <div key={s.id} className="bg-white rounded-xl border border-slate-100 shadow-sm p-5 hover:shadow-md hover:border-orange-200 transition-all relative">
                 <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 cursor-pointer flex-1 min-w-0" onClick={() => router.push(`/training/${s.id}`)}>
                     <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
                       <User size={18} className="text-orange-500" />
                     </div>
-                    <div>
-                      <p className="font-semibold text-slate-800">{s.name}</p>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-800 truncate">{s.name}</p>
                       <p className="text-xs text-slate-400">{s.position}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                     <button onClick={e => handleDelete(e, s.id)} disabled={deleting === s.id}
-                      className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
-                      <Trash2 size={14} />
+                      className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50">
+                      <Trash2 size={15} />
                     </button>
-                    <ChevronRight size={16} className="text-slate-300" />
+                    <ChevronRight size={16} className="text-slate-300 cursor-pointer" onClick={() => router.push(`/training/${s.id}`)} />
                   </div>
                 </div>
-                <div className="text-xs text-slate-400 space-y-0.5 mb-3">
+                <div className="text-xs text-slate-400 space-y-0.5 mb-3 cursor-pointer" onClick={() => router.push(`/training/${s.id}`)}>
                   {s.store && <p>{lang === "en" ? "Store" : "门店"}：{s.store}</p>}
                   <p>{lang === "en" ? "Start" : "入职"}：{s.startDate}</p>
                   {s.trainerName && <p>{lang === "en" ? "Trainer" : "培训员"}：{s.trainerName}</p>}
                 </div>
-                <div>
+                <div className="cursor-pointer" onClick={() => router.push(`/training/${s.id}`)}>
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="text-slate-500">{t("training.checklist.progress")}</span>
                     <span className={`font-semibold ${pct === 100 ? "text-green-600" : "text-orange-500"}`}>{progress}/{TOTAL_TASKS}</span>
