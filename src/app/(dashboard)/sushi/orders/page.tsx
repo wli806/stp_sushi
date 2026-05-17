@@ -252,7 +252,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
 
 export default function SushiOrdersPage() {
   const { username, role } = useSession();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const isRoot = username === "root";
   const canSync = role === "OWNER" || isRoot;
 
@@ -293,19 +293,18 @@ export default function SushiOrdersPage() {
   const weekBounds = useMemo(() => getWeekBounds(), []);
   const todayYMD = toLocalYMD(new Date());
 
-  const thisWeekDelivered = useMemo(() =>
+  const todayDeliveries = useMemo(() =>
     orders.filter(o => {
       if (o.status < 2 || !o.deliveryDate) return false;
-      const ymd = parseToYMD(o.deliveryDate);
-      return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd && ymd <= todayYMD;
-    }).length, [orders, weekBounds, todayYMD]);
+      return parseToYMD(o.deliveryDate) === todayYMD;
+    }).length, [orders, todayYMD]);
 
-  const thisWeekPending = useMemo(() =>
+  const pendingDeliveries = useMemo(() =>
     orders.filter(o => {
       if (o.status < 2 || !o.deliveryDate) return false;
       const ymd = parseToYMD(o.deliveryDate);
-      return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd && ymd > todayYMD;
-    }).length, [orders, weekBounds, todayYMD]);
+      return ymd && ymd > todayYMD;
+    }).length, [orders, todayYMD]);
 
   const nextWeekNeedOrder = useMemo(() =>
     orders.filter(o => {
@@ -351,16 +350,18 @@ export default function SushiOrdersPage() {
       )}
 
       <div className="grid grid-cols-3 gap-2 md:gap-4 mb-6">
-        {[
-          { label: t("orders.stat.total"), value: thisWeekDelivered, color: "text-green-600" },
-          { label: t("orders.stat.ordered"), value: thisWeekPending, color: "text-blue-600" },
-          { label: t("orders.stat.pending"), value: nextWeekNeedOrder, color: "text-orange-500" },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="bg-white rounded-xl border border-slate-100 p-3 md:p-4 shadow-sm">
-            <p className="text-xs text-slate-400 mb-1 leading-tight">{label}</p>
-            <p className={`text-xl md:text-2xl font-bold ${color}`}>{value}</p>
-          </div>
-        ))}
+        <div className="bg-white rounded-xl border border-slate-100 p-3 md:p-4 shadow-sm">
+          <p className="text-xs text-slate-400 mb-1 leading-tight">{lang === "en" ? "Today's deliveries" : "今日到货"}</p>
+          <p className={`text-xl md:text-2xl font-bold ${todayDeliveries > 0 ? "text-green-600" : "text-slate-300"}`}>{todayDeliveries}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-100 p-3 md:p-4 shadow-sm">
+          <p className="text-xs text-slate-400 mb-1 leading-tight">{lang === "en" ? "Upcoming deliveries" : "未到货"}</p>
+          <p className={`text-xl md:text-2xl font-bold ${pendingDeliveries > 0 ? "text-blue-600" : "text-slate-300"}`}>{pendingDeliveries}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-100 p-3 md:p-4 shadow-sm">
+          <p className="text-xs text-slate-400 mb-1 leading-tight">{t("orders.stat.pending")}</p>
+          <p className={`text-xl md:text-2xl font-bold ${nextWeekNeedOrder > 0 ? "text-orange-500" : "text-slate-300"}`}>{nextWeekNeedOrder}</p>
+        </div>
       </div>
 
       <SushiCalendar orders={orders} />

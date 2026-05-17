@@ -15,7 +15,7 @@ function parseToYMD(s: string): string | null {
 
 // GET /api/sushi/notify?secret=xxx
 // Called by a daily cron job on the server.
-// Env vars required: SERVER_CHAN_KEY, NOTIFY_SECRET
+// Env vars required: SERVERCHAN_KEY, CRON_SECRET
 export async function GET(request: NextRequest) {
   const secret = request.nextUrl.searchParams.get("secret");
   if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
@@ -23,20 +23,23 @@ export async function GET(request: NextRequest) {
   }
 
   const scKey = process.env.SERVERCHAN_KEY;
-  if (!scKey) return NextResponse.json({ error: "SERVER_CHAN_KEY not configured" }, { status: 500 });
+  if (!scKey) return NextResponse.json({ error: "SERVERCHAN_KEY not configured" }, { status: 500 });
 
-  const orders = await prisma.sushiOrder.findMany({ where: { status: 1 } });
+  // Use NZ local time (UTC+12) for date comparisons
+  const nzNow = new Date(Date.now() + 12 * 60 * 60 * 1000);
+  const today    = nzNow.toISOString().slice(0, 10);
+  const tomorrow = new Date(nzNow.getTime() + 86400000).toISOString().slice(0, 10);
+  const in3Days  = new Date(nzNow.getTime() + 3 * 86400000).toISOString().slice(0, 10);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  const in3Days = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+  // 待下单订单（按下单截止日分紧急程度）
+  const pendingOrders = await prisma.sushiOrder.findMany({ where: { status: 1 } });
 
-  interface OrderRow { supplierName: string; weekNo: number | null; orderDate: string | null }
+  interface OrderRow { supplierName: string; weekNo: number | null; orderDate: string | null; deliveryDate: string | null }
   const urgent: OrderRow[] = [];
   const soon: OrderRow[] = [];
   const later: OrderRow[] = [];
 
-  for (const o of orders) {
+  for (const o of pendingOrders) {
     const ymd = o.orderDate ? parseToYMD(o.orderDate) : null;
     if (!ymd) continue;
     if (ymd <= tomorrow) urgent.push(o);
@@ -44,11 +47,35 @@ export async function GET(request: NextRequest) {
     else later.push(o);
   }
 
-  if (urgent.length === 0 && soon.length === 0 && later.length === 0) {
-    return NextResponse.json({ sent: false, reason: "no pending orders" });
+  // 明日到货订单（按配送日期，已下单/已确认）
+  const allOrders = await prisma.sushiOrder.findMany({ where: { status: { gte: 2 } } });
+  const tomorrowDeliveries = allOrders.filter(o => o.deliveryDate && parseToYMD(o.deliveryDate) === tomorrow);
+  const todayDeliveries = allOrders.filter(o => o.deliveryDate && parseToYMD(o.deliveryDate) === today);
+
+  const hasAnything = urgent.length > 0 || soon.length > 0 || later.length > 0 || tomorrowDeliveries.length > 0 || todayDeliveries.length > 0;
+  if (!hasAnything) {
+    return NextResponse.json({ sent: false, reason: "nothing to notify" });
   }
 
   let desp = "";
+
+  // 今日 / 明日到货
+  if (todayDeliveries.length > 0) {
+    desp += `### 🚚 今日到货（${todayDeliveries.length} 笔）\n\n`;
+    for (const o of todayDeliveries) {
+      desp += `- ${o.supplierName}${o.weekNo ? ` (W${o.weekNo})` : ""}\n`;
+    }
+    desp += "\n";
+  }
+  if (tomorrowDeliveries.length > 0) {
+    desp += `### 📦 明日到货（${tomorrowDeliveries.length} 笔）\n\n`;
+    for (const o of tomorrowDeliveries) {
+      desp += `- ${o.supplierName}${o.weekNo ? ` (W${o.weekNo})` : ""}\n`;
+    }
+    desp += "\n";
+  }
+
+  // 待下单提醒
   if (urgent.length > 0) {
     desp += "### ⚠️ 今明截止，需立即下单\n\n";
     for (const o of urgent) {
@@ -72,9 +99,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const title = urgent.length > 0
-    ? `🚨 寿司下单提醒 — ${urgent.length} 单今明截止`
-    : `📋 寿司下单提醒 — ${orders.length} 单待下单`;
+  const titleParts: string[] = [];
+  if (todayDeliveries.length > 0) titleParts.push(`今日到货 ${todayDeliveries.length} 笔`);
+  if (tomorrowDeliveries.length > 0) titleParts.push(`明日到货 ${tomorrowDeliveries.length} 笔`);
+  if (urgent.length > 0) titleParts.push(`${urgent.length} 单今明截止下单`);
+  const title = titleParts.length > 0 ? `🔔 寿司提醒 — ${titleParts.join(" · ")}` : `📋 寿司提醒 — ${pendingOrders.length} 单待下单`;
 
   const resp = await fetch(`https://sctapi.ftqq.com/${scKey}.send`, {
     method: "POST",
@@ -82,5 +111,5 @@ export async function GET(request: NextRequest) {
     body: new URLSearchParams({ title, desp }),
   });
   const result = await resp.json();
-  return NextResponse.json({ sent: true, urgent: urgent.length, total: orders.length, result });
+  return NextResponse.json({ sent: true, todayDeliveries: todayDeliveries.length, tomorrowDeliveries: tomorrowDeliveries.length, urgentOrders: urgent.length, result });
 }

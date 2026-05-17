@@ -333,8 +333,6 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
   const allErrors: string[] = [];
   const allDebug: string[] = [];
   const allNewOrders: string[] = [];
-  const allTodayDeliveries: string[] = [];
-  const allTomorrowDeliveries: string[] = [];
   let totalSynced = 0;
 
   for (let wn = startWeek; wn <= endWeek; wn++) {
@@ -345,8 +343,6 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
       allErrors.push(...result.errors);
       allDebug.push(...result.debug);
       allNewOrders.push(...result.newOrders);
-      allTodayDeliveries.push(...result.todayDeliveries);
-      allTomorrowDeliveries.push(...result.tomorrowDeliveries);
     } catch (e) { allErrors.push(`Week ${wn}: ${String(e)}`); }
   }
 
@@ -372,16 +368,34 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
     allDebug.push(`清理漏单 ${toDelete.length} 条（下单日期已过且未提交）`);
   }
 
+  // 新增订单通知
   if (allNewOrders.length > 0) {
     const unique = [...new Set(allNewOrders)];
     await wxNotify(`🛒 寿司系统：${unique.length} 个新采购订单`, unique.map(s => `- ${s}`).join("\n"));
   }
-  if (allTodayDeliveries.length > 0) {
-    const unique = [...new Set(allTodayDeliveries)];
+
+  // 今日 / 明日到货：同步完成后查数据库，避免时区误差和遗漏
+  const nzNow = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+  const todayNZ  = nzNow.toISOString().slice(0, 10);
+  const tomorrowNZ = new Date(nzNow.getTime() + 86400000).toISOString().slice(0, 10);
+
+  const deliveryOrders = await prisma.sushiOrder.findMany({ where: { status: { gte: 2 } } });
+
+  function matchDate(raw: string | null, target: string): boolean {
+    if (!raw) return false;
+    const ymd = parseDeliveryDate(raw);
+    return ymd === target;
+  }
+
+  const todayList   = deliveryOrders.filter(o => matchDate(o.deliveryDate, todayNZ)).map(o => o.supplierName);
+  const tomorrowList = deliveryOrders.filter(o => matchDate(o.deliveryDate, tomorrowNZ)).map(o => o.supplierName);
+
+  if (todayList.length > 0) {
+    const unique = [...new Set(todayList)];
     await wxNotify(`📦 寿司系统：今日 ${unique.length} 笔订单到货`, unique.map(s => `- ${s}`).join("\n"));
   }
-  if (allTomorrowDeliveries.length > 0) {
-    const unique = [...new Set(allTomorrowDeliveries)];
+  if (tomorrowList.length > 0) {
+    const unique = [...new Set(tomorrowList)];
     await wxNotify(`🚚 寿司系统：明日 ${unique.length} 笔订单到货提醒`, unique.map(s => `- ${s}`).join("\n"));
   }
 
