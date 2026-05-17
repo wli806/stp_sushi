@@ -25,6 +25,15 @@ function parseDeliveryDate(s: string): string | null {
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
+// OFFICE supplier always delivers on Thursday — compute the Thursday after the order date
+function getNextThursday(orderYMD: string): string {
+  const d = new Date(orderYMD + "T00:00:00");
+  d.setDate(d.getDate() + 1); // start from day after order date
+  const daysUntilThu = (4 - d.getDay() + 7) % 7; // Thu = day index 4
+  d.setDate(d.getDate() + daysUntilThu);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
 function ossDateFmt(d: Date): string {
   return `${String(d.getDate()).padStart(2,"0")}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
 }
@@ -248,6 +257,11 @@ async function syncWeekOrders(
       if (order.id.startsWith("virtual-") && order.orderDate) {
         const ymd = parseDeliveryDate(order.orderDate);
         if (ymd && ymd <= todayYMDLocal) { synced++; continue; }
+      }
+      // OFFICE supplier always delivers on Thursday — ignore OSS delivery date
+      if (order.supplier.toUpperCase().includes("OFFICE") && order.orderDate) {
+        const orderYMD = parseDeliveryDate(order.orderDate);
+        if (orderYMD) order.deliveryDate = getNextThursday(orderYMD);
       }
       try {
         const isNew = !(await prisma.sushiOrder.findUnique({ where: { ossId: order.id }, select: { id: true } }));
