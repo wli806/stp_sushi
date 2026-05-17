@@ -239,9 +239,16 @@ async function syncWeekOrders(
       })
     );
 
+    const todayYMDLocal = now.toISOString().slice(0, 10);
     for (const result of results) {
       if (result.status === "rejected") { errors.push(String(result.reason)); continue; }
       const { order, items } = result.value;
+      // Virtual orders whose order date is today or past have been handled by the user
+      // (even if submitted empty). Don't persist them so they stop showing as 待下单.
+      if (order.id.startsWith("virtual-") && order.orderDate) {
+        const ymd = parseDeliveryDate(order.orderDate);
+        if (ymd && ymd <= todayYMDLocal) { synced++; continue; }
+      }
       try {
         const isNew = !(await prisma.sushiOrder.findUnique({ where: { ossId: order.id }, select: { id: true } }));
         const dbOrder = await prisma.sushiOrder.upsert({
@@ -312,17 +319,21 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
     } catch (e) { allErrors.push(`Week ${wn}: ${String(e)}`); }
   }
 
-  // 清理：状态仍为 pending 但下单日期已过的订单（即漏单），从数据库删除
+  // 清理：status=1 但下单日期已处理的订单，从数据库删除
+  // - 虚拟订单（virtual-*）：下单日 <= 今天（用户已在 OSS 处理，可能是空提交）
+  // - 真实 PO：下单日 < 今天（确实漏单）
   const todayYMD = now.toISOString().slice(0, 10);
   const stalePending = await prisma.sushiOrder.findMany({
     where: { status: 1 },
-    select: { id: true, orderDate: true, supplierName: true },
+    select: { id: true, ossId: true, orderDate: true, supplierName: true },
   });
   const toDelete = stalePending
     .filter(o => {
       if (!o.orderDate) return false;
       const ymd = parseDeliveryDate(o.orderDate);
-      return ymd !== null && ymd < todayYMD;
+      if (!ymd) return false;
+      const isVirtual = o.ossId.startsWith("virtual-");
+      return isVirtual ? ymd <= todayYMD : ymd < todayYMD;
     })
     .map(o => o.id);
   if (toDelete.length > 0) {
