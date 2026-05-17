@@ -159,6 +159,7 @@ const translations = {
     "sidebar.title": "Sushi Management",
     "sidebar.purchasing": "Purchasing",
     "sidebar.orders": "Orders",
+    "sidebar.poCalendar": "PO Calendar",
     "sidebar.inventory": "Inventory",
     "sidebar.users": "Users",
     "sidebar.account": "Account",

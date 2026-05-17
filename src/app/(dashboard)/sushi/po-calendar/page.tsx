@@ -225,7 +225,7 @@ export default function POCalendarPage() {
 
       {/* 待下单列表 */}
       {loading ? (
-        <div className="bg-white rounded-xl p-12 text-center text-slate-400">加载中...</div>
+        <div className="bg-white rounded-xl p-12 text-center text-slate-400">{t("common.loading")}</div>
       ) : (
         <div className="space-y-4">
           {overdue.length > 0 && (
