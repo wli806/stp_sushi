@@ -13,6 +13,7 @@ import {
   Boxes,
   CalendarClock,
   GraduationCap,
+  PackageCheck,
   ChevronDown,
   Menu,
   X,
@@ -33,9 +34,10 @@ const navItems: NavItem[] = [
   {
     href: "/sushi", labelKey: "sidebar.purchasing", icon: UtensilsCrossed, roles: ["OWNER", "MANAGER", "VIEWER"],
     children: [
-      { href: "/sushi/orders",      labelKey: "sidebar.orders",      icon: ClipboardList },
-      { href: "/sushi/po-calendar", labelKey: "sidebar.poCalendar",  icon: CalendarClock },
-      { href: "/sushi/inventory",   labelKey: "sidebar.inventory",   icon: Boxes },
+      { href: "/sushi/orders",            labelKey: "sidebar.orders",         icon: ClipboardList },
+      { href: "/sushi/po-calendar",       labelKey: "sidebar.poCalendar",     icon: CalendarClock },
+      { href: "/sushi/inventory",         labelKey: "sidebar.inventory",      icon: Boxes },
+      { href: "/sushi/goods-receiving",   labelKey: "sidebar.goodsReceiving", icon: PackageCheck },
     ],
   },
   { href: "/training", labelKey: "sidebar.training", icon: GraduationCap, roles: ["OWNER", "MANAGER", "VIEWER"] },
