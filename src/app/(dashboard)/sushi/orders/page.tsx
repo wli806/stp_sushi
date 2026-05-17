@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { RefreshCw, UtensilsCrossed, ChevronDown, ChevronUp, Package, PackagePlus, AlertCircle, CheckCircle2, X } from "lucide-react";
+import { RefreshCw, UtensilsCrossed, AlertCircle, ExternalLink, X } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useLanguage } from "@/components/LanguageProvider";
 import { format } from "date-fns";
@@ -16,7 +16,6 @@ interface SushiOrder {
   inventoryApplied: boolean; items: SushiItem[];
 }
 
-const MONTH_NAMES_ZH = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
 const MONTH_NAMES_EN = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DOW_ZH = ["一","二","三","四","五","六","日"];
 const DOW_EN = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -24,6 +23,14 @@ const MONTH_ABBR: Record<string, string> = {
   jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",
   jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12",
 };
+const OSS_BASE = "https://oss.spientsyserv.com";
+
+function ossUrl(order: SushiOrder): string {
+  if (order.ossId.startsWith("virtual-") && order.poNumber) {
+    return `${OSS_BASE}/shop/${order.poNumber}`;
+  }
+  return `${OSS_BASE}/shop/editorder/${order.ossId}`;
+}
 
 function toLocalYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -40,17 +47,17 @@ function parseToYMD(s: string): string | null {
   return isNaN(d.getTime()) ? null : toLocalYMD(d);
 }
 
-interface DayEvent { supplier: string; pairKey: string; items: SushiItem[]; }
+interface DayEvent { type: "order" | "delivery"; supplier: string; pairKey: string; items: SushiItem[]; }
 
 const CAL_PALETTE = [
-  { delivery: "bg-blue-500 text-white", dot: "bg-blue-500" },
-  { delivery: "bg-emerald-500 text-white", dot: "bg-emerald-500" },
-  { delivery: "bg-violet-500 text-white", dot: "bg-violet-500" },
-  { delivery: "bg-rose-500 text-white", dot: "bg-rose-500" },
-  { delivery: "bg-amber-500 text-white", dot: "bg-amber-500" },
-  { delivery: "bg-teal-500 text-white", dot: "bg-teal-500" },
-  { delivery: "bg-indigo-500 text-white", dot: "bg-indigo-500" },
-  { delivery: "bg-orange-500 text-white", dot: "bg-orange-500" },
+  { order: "bg-blue-100 text-blue-700", delivery: "bg-blue-500 text-white", dot: "bg-blue-500" },
+  { order: "bg-emerald-100 text-emerald-700", delivery: "bg-emerald-500 text-white", dot: "bg-emerald-500" },
+  { order: "bg-violet-100 text-violet-700", delivery: "bg-violet-500 text-white", dot: "bg-violet-500" },
+  { order: "bg-rose-100 text-rose-700", delivery: "bg-rose-500 text-white", dot: "bg-rose-500" },
+  { order: "bg-amber-100 text-amber-700", delivery: "bg-amber-500 text-white", dot: "bg-amber-500" },
+  { order: "bg-teal-100 text-teal-700", delivery: "bg-teal-500 text-white", dot: "bg-teal-500" },
+  { order: "bg-indigo-100 text-indigo-700", delivery: "bg-indigo-500 text-white", dot: "bg-indigo-500" },
+  { order: "bg-orange-100 text-orange-700", delivery: "bg-orange-500 text-white", dot: "bg-orange-500" },
 ];
 
 function supplierShort(name: string): string { return name.split(/[\s\-\[]/)[0].slice(0, 9); }
@@ -109,13 +116,21 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
   const dayMap = useMemo(() => {
     const map = new Map<string, DayEvent[]>();
     for (const o of orders) {
-      if (o.status < 2 || o.items.length === 0) continue;
-      const deliveryYMD = o.deliveryDate ? parseToYMD(o.deliveryDate) : null;
-      if (!deliveryYMD) continue;
+      if (o.status < 2) continue;
       const supplier = o.supplierName || "Unknown";
-      const evs = map.get(deliveryYMD) ?? [];
-      evs.push({ supplier, pairKey: o.id, items: o.items });
-      map.set(deliveryYMD, evs);
+      const pairKey = o.id;
+      const orderYMD = o.orderDate ? parseToYMD(o.orderDate) : null;
+      const deliveryYMD = o.deliveryDate ? parseToYMD(o.deliveryDate) : null;
+      if (orderYMD) {
+        const evs = map.get(orderYMD) ?? [];
+        evs.push({ type: "order", supplier, pairKey, items: [] });
+        map.set(orderYMD, evs);
+      }
+      if (deliveryYMD && o.items.length > 0) {
+        const evs = map.get(deliveryYMD) ?? [];
+        evs.push({ type: "delivery", supplier, pairKey, items: o.items });
+        map.set(deliveryYMD, evs);
+      }
     }
     return map;
   }, [orders]);
@@ -139,6 +154,13 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
         <div className="space-y-0.5">
           {events.map((ev, ei) => {
             const colors = supplierColorMap.get(ev.supplier) ?? CAL_PALETTE[0];
+            if (ev.type === "order") {
+              return (
+                <div key={ei} className={`${colors.order} text-xs rounded px-2 py-0.5 truncate leading-5`}>
+                  {supplierShort(ev.supplier)}
+                </div>
+              );
+            }
             return (
               <button key={ei} onClick={() => setSelectedEvent({ ...ev, deliveryDate: ymd })}
                 className={`${colors.delivery} w-full text-xs rounded px-2 py-0.5 truncate leading-5 cursor-pointer hover:opacity-85 active:opacity-75 transition-opacity text-left`}>
@@ -178,7 +200,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
               {supplierShort(supplier)}
             </div>
           ))}
-          <div className="ml-auto text-xs text-slate-400">{lang === "en" ? "Click to view items" : "点击查看商品明细"}</div>
+          <div className="ml-auto text-xs text-slate-400">{lang === "en" ? "Light = ordered · Dark = delivery (click)" : "浅色 = 下单日 · 深色 = 配送日（点击查看）"}</div>
         </div>
       </div>
 
@@ -237,13 +259,6 @@ export default function SushiOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [applying, setApplying] = useState<string | null>(null);
-  const [applyMsg, setApplyMsg] = useState<{ id: string; ok: boolean; text: string } | null>(null);
-
-  function toggleExpanded(id: string) {
-    setExpanded(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
-  }
 
   async function load() {
     setLoading(true);
@@ -271,24 +286,6 @@ export default function SushiOrdersPage() {
       setSyncMsg(t("orders.syncFail", { msg: "network error" }));
     } finally {
       setSyncing(false);
-    }
-  }
-
-  async function handleApplyInventory(order: SushiOrder) {
-    setApplying(order.id);
-    setApplyMsg(null);
-    try {
-      const res = await fetch(`/api/sushi/orders/${order.id}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "apply-inventory" }),
-      });
-      const data = await res.json();
-      setApplyMsg({ id: order.id, ok: !data.error, text: data.error ? data.error : t("orders.applyOk") });
-      if (!data.error) load();
-    } catch {
-      setApplyMsg({ id: order.id, ok: false, text: t("orders.applyFail") });
-    } finally {
-      setApplying(null);
     }
   }
 
@@ -320,13 +317,6 @@ export default function SushiOrdersPage() {
     orders.filter(o => {
       if (o.status !== 1 || !o.orderDate) return false;
       const ymd = parseToYMD(o.orderDate);
-      return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd;
-    }), [orders, weekBounds]);
-
-  const orderedOrders = useMemo(() =>
-    orders.filter(o => {
-      if (o.status < 2 || o.items.length === 0 || !o.deliveryDate) return false;
-      const ymd = parseToYMD(o.deliveryDate);
       return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd;
     }), [orders, weekBounds]);
 
@@ -381,119 +371,34 @@ export default function SushiOrdersPage() {
           <UtensilsCrossed size={40} className="mx-auto text-slate-300 mb-3" />
           <p className="text-slate-400">{t("orders.noData")}</p>
         </div>
-      ) : (
-        <div className="space-y-6">
-          {pendingOrders.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <AlertCircle size={16} className="text-red-500" />
-                <h2 className="font-semibold text-slate-700">{t("orders.section.pending")} <span className="text-red-500">({pendingOrders.length})</span></h2>
-                <span className="text-xs text-slate-400">— {t("orders.section.pendingDesc")}</span>
-              </div>
-              <div className="space-y-2">
-                {pendingOrders.map(order => (
-                  <div key={order.id} className="bg-red-50 border border-red-200 rounded-xl px-4 md:px-6 py-4 flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                        <span className="font-semibold text-slate-800">{order.supplierName || "Unknown"}</span>
-                        {order.weekNo && <span className="text-xs text-slate-400">W{order.weekNo}</span>}
-                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">{t("orders.status.pending")}</span>
-                      </div>
-                      <p className="text-slate-400 text-xs">
-                        {order.orderDate && `${t("orders.orderDate")} ${order.orderDate}`}
-                        {order.deliveryDate && ` · ${t("orders.deliveryDate")} ${order.deliveryDate}`}
-                      </p>
-                    </div>
-                    <div className="text-xs text-red-400 font-medium">{t("orders.pendingHint")}</div>
+      ) : pendingOrders.length > 0 ? (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle size={16} className="text-red-500" />
+            <h2 className="font-semibold text-slate-700">{t("orders.section.pending")} <span className="text-red-500">({pendingOrders.length})</span></h2>
+            <span className="text-xs text-slate-400">— {t("orders.section.pendingDesc")}</span>
+          </div>
+          <div className="space-y-2">
+            {pendingOrders.map(order => (
+              <a key={order.id} href={ossUrl(order)} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl px-4 md:px-6 py-4 hover:bg-red-100 transition-colors">
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    <span className="font-semibold text-slate-800">{order.supplierName || "Unknown"}</span>
+                    {order.weekNo && <span className="text-xs text-slate-400">W{order.weekNo}</span>}
+                    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">{t("orders.status.pending")}</span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {orderedOrders.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <CheckCircle2 size={16} className="text-green-500" />
-                <h2 className="font-semibold text-slate-700">{t("orders.section.ordered")} <span className="text-green-600">({orderedOrders.length})</span></h2>
-                <span className="text-xs text-slate-400">— {t("orders.section.orderedDesc")}</span>
-              </div>
-              <div className="space-y-3">
-                {orderedOrders.map(order => {
-                  const statusLabel = order.status === 3 ? t("orders.status.confirmed") : t("orders.status.ordered");
-                  const statusCls = order.status === 3 ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700";
-                  return (
-                    <div key={order.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                      <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                            <span className="font-semibold text-slate-800">{order.supplierName || "Unknown"}</span>
-                            {order.weekNo && <span className="text-xs text-slate-400">W{order.weekNo}</span>}
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusCls}`}>{statusLabel}</span>
-                            {order.inventoryApplied && <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-700">{t("orders.inStock")}</span>}
-                            {!order.inventoryApplied && (() => { const d = order.deliveryDate ? parseToYMD(order.deliveryDate) : null; return d && d <= toLocalYMD(new Date()) ? <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600">{t("orders.toStock")}</span> : null; })()}
-                          </div>
-                          <p className="text-slate-400 text-xs">
-                            {order.poNumber && `${t("orders.poNumber")} ${order.poNumber}`}
-                            {order.orderDate && ` · ${t("orders.orderDate")} ${order.orderDate}`}
-                            {order.deliveryDate && ` · ${t("orders.deliveryDate")} ${order.deliveryDate}`}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                          <span className="text-sm text-slate-500">{order.items.length} {t("orders.items")}</span>
-                          {canSync && !order.inventoryApplied && (() => { const d = order.deliveryDate ? parseToYMD(order.deliveryDate) : null; return d && d <= toLocalYMD(new Date()); })() && (
-                            <button onClick={() => handleApplyInventory(order)} disabled={applying === order.id}
-                              className="flex items-center gap-1 px-2 py-1 bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white rounded-lg text-xs font-medium transition-colors">
-                              <PackagePlus size={13} />
-                              {applying === order.id ? t("orders.stockingIn") : t("orders.stockIn")}
-                            </button>
-                          )}
-                          <button onClick={() => toggleExpanded(order.id)} className="text-slate-400 hover:text-slate-600">
-                            {expanded.has(order.id) ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                          </button>
-                        </div>
-                      </div>
-                      {applyMsg?.id === order.id && (
-                        <div className={`px-6 py-2 text-xs ${applyMsg.ok ? "bg-teal-50 text-teal-700" : "bg-red-50 text-red-600"}`}>{applyMsg.text}</div>
-                      )}
-                      {expanded.has(order.id) && (
-                        order.items.length === 0 ? (
-                          <div className="border-t border-slate-100 px-6 py-3 bg-slate-50/50 text-center text-sm text-slate-400">
-                            <Package size={14} className="inline mr-1" />{t("orders.noItems")}
-                          </div>
-                        ) : (
-                          <div className="border-t border-slate-100 px-4 md:px-6 py-4 bg-slate-50/50 overflow-x-auto">
-                            <table className="w-full text-sm min-w-[300px]">
-                              <thead>
-                                <tr className="text-slate-400 text-xs border-b border-slate-200">
-                                  <th className="text-left pb-2 font-medium">{t("orders.col.code")}</th>
-                                  <th className="text-left pb-2 font-medium">{t("orders.col.name")}</th>
-                                  <th className="text-center pb-2 font-medium">{t("orders.col.qty")}</th>
-                                  <th className="text-left pb-2 font-medium">{t("orders.col.unit")}</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {order.items.map(item => (
-                                  <tr key={item.id}>
-                                    <td className="py-2 text-slate-400 text-xs">{item.itemCode}</td>
-                                    <td className="py-2 text-slate-700">{item.itemName}</td>
-                                    <td className="py-2 text-center font-semibold text-slate-800">{item.quantity}</td>
-                                    <td className="py-2 text-slate-500">{item.uom}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                  <p className="text-slate-400 text-xs">
+                    {order.orderDate && `${t("orders.orderDate")} ${order.orderDate}`}
+                    {order.deliveryDate && ` · ${t("orders.deliveryDate")} ${order.deliveryDate}`}
+                  </p>
+                </div>
+                <ExternalLink size={16} className="text-red-400 flex-shrink-0" />
+              </a>
+            ))}
+          </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
