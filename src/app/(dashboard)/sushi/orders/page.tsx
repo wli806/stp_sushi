@@ -292,9 +292,6 @@ export default function SushiOrdersPage() {
     }
   }
 
-  const orderedOrders = orders.filter(o => o.status >= 2 && o.items.length > 0);
-  const pendingOrders = orders.filter(o => o.status === 1);
-
   const weekBounds = useMemo(() => getWeekBounds(), []);
   const todayYMD = toLocalYMD(new Date());
 
@@ -318,6 +315,20 @@ export default function SushiOrdersPage() {
       const ymd = parseToYMD(o.orderDate);
       return ymd && ymd >= weekBounds.nextStart && ymd <= weekBounds.nextEnd;
     }).length, [orders, weekBounds]);
+
+  const pendingOrders = useMemo(() =>
+    orders.filter(o => {
+      if (o.status !== 1 || !o.orderDate) return false;
+      const ymd = parseToYMD(o.orderDate);
+      return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd;
+    }), [orders, weekBounds]);
+
+  const orderedOrders = useMemo(() =>
+    orders.filter(o => {
+      if (o.status < 2 || o.items.length === 0 || !o.deliveryDate) return false;
+      const ymd = parseToYMD(o.deliveryDate);
+      return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd;
+    }), [orders, weekBounds]);
 
   const lastSync = orders.length > 0
     ? orders.reduce((a, b) => a.syncedAt > b.syncedAt ? a : b).syncedAt
