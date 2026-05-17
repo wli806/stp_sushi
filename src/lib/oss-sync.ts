@@ -209,18 +209,34 @@ async function syncWeekOrders(
 
   if (allOrders.length === 0) return { synced, errors, debug, newOrders, todayDeliveries, tomorrowDeliveries };
 
-  for (let i = 0; i < allOrders.length; i += 5) {
-    const batch = allOrders.slice(i, i + 5);
+  // Pre-load all existing orders for this week in one DB query to avoid N individual findUnique calls
+  const existingRows = await prisma.sushiOrder.findMany({
+    where: { ossId: { in: allOrders.map(o => o.id) } },
+    select: { id: true, ossId: true, status: true, deliveryDate: true, inventoryApplied: true },
+  });
+  const existingMap = new Map(existingRows.map(r => [r.ossId, r]));
+
+  const todayYMDLocal = now.toISOString().slice(0, 10);
+
+  // Batch size 10 (up from 5) — OSS handles concurrent requests fine
+  for (let i = 0; i < allOrders.length; i += 10) {
+    const batch = allOrders.slice(i, i + 10);
     const results = await Promise.allSettled(
       batch.map(async (order) => {
         const headers = { "Content-Type": "application/x-www-form-urlencoded", "Cookie": `ci_session=${session}` };
         const isVirtualOrder = order.id.startsWith("virtual-");
+        const existing = existingMap.get(order.id);
+        const statusChanged = !existing || existing.status !== order.status;
+        const isOffice = order.supplier.toUpperCase().includes("OFFICE");
+        // Skip delivery-date fetch if OFFICE (we override it) or if already stored
+        const needsDeliveryFetch = !isOffice && order.deliveryDate === null && order.editPath && !existing?.deliveryDate;
+
         const [itemsRes, detailRes] = await Promise.all([
-          // Virtual orders have no real ID — skip items fetch
-          !isVirtualOrder
+          // Skip item fetch for existing orders whose status hasn't changed
+          !isVirtualOrder && statusChanged
             ? fetch(`${BASE}/shop/home/getExistingItems`, { method: "POST", headers, body: new URLSearchParams({ headerid: order.id }) })
             : Promise.resolve(null),
-          order.deliveryDate === null && order.editPath
+          needsDeliveryFetch
             ? fetch(`${BASE}/shop/${order.editPath}`, { headers: { Cookie: `ci_session=${session}`, Referer: `${BASE}/shop/home`, "User-Agent": "Mozilla/5.0" } })
             : Promise.resolve(null),
         ]);
@@ -231,7 +247,7 @@ async function syncWeekOrders(
           try { const parsed = JSON.parse(text); items = Array.isArray(parsed) ? parsed : []; } catch { items = []; }
         }
 
-        let deliveryDate = order.deliveryDate;
+        let deliveryDate = order.deliveryDate ?? existing?.deliveryDate ?? null;
         if (detailRes) {
           const html = await detailRes.text();
           const seen = new Set<string>();
@@ -244,16 +260,14 @@ async function syncWeekOrders(
           else if (dates.length === 1) deliveryDate = dates[0];
           debug.push(`[${order.supplier}] week=${weekNo} → deliveryDate=${deliveryDate ?? "null"}`);
         }
-        return { order: { ...order, deliveryDate }, items };
+        return { order: { ...order, deliveryDate }, items, existing, statusChanged };
       })
     );
 
-    const todayYMDLocal = now.toISOString().slice(0, 10);
     for (const result of results) {
       if (result.status === "rejected") { errors.push(String(result.reason)); continue; }
-      const { order, items } = result.value;
+      const { order, items, existing, statusChanged } = result.value;
       // Virtual orders whose order date is today or past have been handled by the user
-      // (even if submitted empty). Don't persist them so they stop showing as 待下单.
       if (order.id.startsWith("virtual-") && order.orderDate) {
         const ymd = parseDeliveryDate(order.orderDate);
         if (ymd && ymd <= todayYMDLocal) { synced++; continue; }
@@ -264,27 +278,30 @@ async function syncWeekOrders(
         if (orderYMD) order.deliveryDate = getNextThursday(orderYMD);
       }
       try {
-        const isNew = !(await prisma.sushiOrder.findUnique({ where: { ossId: order.id }, select: { id: true } }));
+        const isNew = !existing;
         const dbOrder = await prisma.sushiOrder.upsert({
           where: { ossId: order.id },
           update: { poNumber: order.poNumber, supplierName: order.supplier, status: order.status, poDate: order.poDate || null, deliveryDate: order.deliveryDate, orderDate: order.orderDate || null, weekNo: order.weekNo, year: order.year, syncedAt: new Date() },
           create: { ossId: order.id, poNumber: order.poNumber, supplierName: order.supplier, status: order.status, poDate: order.poDate || null, deliveryDate: order.deliveryDate, orderDate: order.orderDate || null, weekNo: order.weekNo, year: order.year },
         });
         if (isNew && items.length > 0) newOrders.push(order.supplier);
-        await prisma.sushiOrderItem.deleteMany({ where: { orderId: dbOrder.id } });
-        if (items.length > 0) {
-          await prisma.sushiOrderItem.createMany({
-            data: items.map(item => ({
-              orderId: dbOrder.id, ossItemId: String(item.id ?? ""),
-              itemCode: item.item_code ?? "", itemName: item.item_name ?? item.supplier_item_name ?? "",
-              uom: item.uom_name ?? "", quantity: parseFloat(item.qty ?? "0"),
-            })),
-          });
+        // Only update items when status changed or order is new (avoids unnecessary writes)
+        if (statusChanged || isNew) {
+          await prisma.sushiOrderItem.deleteMany({ where: { orderId: dbOrder.id } });
+          if (items.length > 0) {
+            await prisma.sushiOrderItem.createMany({
+              data: items.map(item => ({
+                orderId: dbOrder.id, ossItemId: String(item.id ?? ""),
+                itemCode: item.item_code ?? "", itemName: item.item_name ?? item.supplier_item_name ?? "",
+                uom: item.uom_name ?? "", quantity: parseFloat(item.qty ?? "0"),
+              })),
+            });
+          }
         }
         const deliveryYMD = parseDeliveryDate(order.deliveryDate ?? "");
         if (deliveryYMD) {
-          const todayYMD = new Date().toISOString().slice(0, 10);
-          const tomorrowYMD = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+          const todayYMD = now.toISOString().slice(0, 10);
+          const tomorrowYMD = new Date(now.getTime() + 86400000).toISOString().slice(0, 10);
           if (deliveryYMD <= todayYMD && !dbOrder.inventoryApplied) {
             todayDeliveries.push(order.supplier);
             try { await applyOrderToInventory(dbOrder.id); } catch { /* 不影响同步 */ }
@@ -311,7 +328,7 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
   const hasHistory = (await prisma.sushiOrder.count()) > 0;
   // Incremental: only current week onward (past weeks stay in DB as-is)
   const startWeek = hasHistory ? currentWeekNo : 1;
-  const endWeek = currentWeekNo + 4;
+  const endWeek = currentWeekNo + 2;
 
   const allErrors: string[] = [];
   const allDebug: string[] = [];
