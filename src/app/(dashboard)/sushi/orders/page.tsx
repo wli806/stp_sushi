@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { RefreshCw, UtensilsCrossed, ChevronDown, ChevronUp, Package, PackagePlus, AlertCircle, CheckCircle2 } from "lucide-react";
+import { RefreshCw, UtensilsCrossed, ChevronDown, ChevronUp, Package, PackagePlus, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useLanguage } from "@/components/LanguageProvider";
 import { format } from "date-fns";
@@ -36,17 +36,17 @@ function parseToYMD(s: string): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
-interface DayEvent { type: "order" | "delivery"; supplier: string; relatedDate: string | null; pairKey: string; }
+interface DayEvent { supplier: string; pairKey: string; items: SushiItem[]; }
 
 const CAL_PALETTE = [
-  { order: "bg-blue-100 text-blue-700", delivery: "bg-blue-500 text-white", ring: "ring-blue-500", dot: "bg-blue-500" },
-  { order: "bg-emerald-100 text-emerald-700", delivery: "bg-emerald-500 text-white", ring: "ring-emerald-500", dot: "bg-emerald-500" },
-  { order: "bg-violet-100 text-violet-700", delivery: "bg-violet-500 text-white", ring: "ring-violet-500", dot: "bg-violet-500" },
-  { order: "bg-rose-100 text-rose-700", delivery: "bg-rose-500 text-white", ring: "ring-rose-500", dot: "bg-rose-500" },
-  { order: "bg-amber-100 text-amber-700", delivery: "bg-amber-500 text-white", ring: "ring-amber-500", dot: "bg-amber-500" },
-  { order: "bg-teal-100 text-teal-700", delivery: "bg-teal-500 text-white", ring: "ring-teal-500", dot: "bg-teal-500" },
-  { order: "bg-indigo-100 text-indigo-700", delivery: "bg-indigo-500 text-white", ring: "ring-indigo-500", dot: "bg-indigo-500" },
-  { order: "bg-orange-100 text-orange-700", delivery: "bg-orange-500 text-white", ring: "ring-orange-500", dot: "bg-orange-500" },
+  { delivery: "bg-blue-500 text-white", dot: "bg-blue-500" },
+  { delivery: "bg-emerald-500 text-white", dot: "bg-emerald-500" },
+  { delivery: "bg-violet-500 text-white", dot: "bg-violet-500" },
+  { delivery: "bg-rose-500 text-white", dot: "bg-rose-500" },
+  { delivery: "bg-amber-500 text-white", dot: "bg-amber-500" },
+  { delivery: "bg-teal-500 text-white", dot: "bg-teal-500" },
+  { delivery: "bg-indigo-500 text-white", dot: "bg-indigo-500" },
+  { delivery: "bg-orange-500 text-white", dot: "bg-orange-500" },
 ];
 
 function supplierShort(name: string): string { return name.split(/[\s\-\[]/)[0].slice(0, 9); }
@@ -57,28 +57,43 @@ function fmtYMD(ymd: string, lang: string): string {
   return `${parseInt(m)}月${parseInt(d)}日`;
 }
 
-function getThreeWeekDays(): string[] {
+function getTwoWeekDays(): string[] {
   const now = new Date();
   const dow = now.getDay();
   const mondayOffset = dow === 0 ? -6 : 1 - dow;
-  const lastMonday = new Date(now);
-  lastMonday.setDate(now.getDate() + mondayOffset - 7);
-  lastMonday.setHours(0, 0, 0, 0);
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() + mondayOffset);
+  thisMonday.setHours(0, 0, 0, 0);
   const days: string[] = [];
-  for (let i = 0; i < 21; i++) {
-    const d = new Date(lastMonday);
-    d.setDate(lastMonday.getDate() + i);
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(thisMonday);
+    d.setDate(thisMonday.getDate() + i);
     days.push(d.toISOString().slice(0, 10));
   }
   return days;
+}
+
+function getWeekBounds() {
+  const now = new Date();
+  const dow = now.getDay();
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() + mondayOffset);
+  thisMonday.setHours(0, 0, 0, 0);
+  function addDays(n: number): string {
+    const r = new Date(thisMonday);
+    r.setDate(r.getDate() + n);
+    return r.toISOString().slice(0, 10);
+  }
+  return { thisStart: addDays(0), thisEnd: addDays(6), nextStart: addDays(7), nextEnd: addDays(13) };
 }
 
 function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
   const { lang, t } = useLanguage();
   const now = new Date();
   const todayKey = now.toISOString().slice(0, 10);
-  const [hoveredPairKey, setHoveredPairKey] = useState<string | null>(null);
   const DOW_NAMES = lang === "en" ? DOW_EN : DOW_ZH;
+  const [selectedEvent, setSelectedEvent] = useState<(DayEvent & { deliveryDate: string }) | null>(null);
 
   const supplierColorMap = useMemo(() => {
     const unique = [...new Set(orders.map(o => o.supplierName || ""))];
@@ -90,26 +105,18 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
   const dayMap = useMemo(() => {
     const map = new Map<string, DayEvent[]>();
     for (const o of orders) {
-      if (o.status >= 2 && o.items.length === 0) continue;
-      const supplier = o.supplierName || "Unknown";
-      const orderYMD = o.orderDate ? parseToYMD(o.orderDate) : null;
+      if (o.status < 2 || o.items.length === 0) continue;
       const deliveryYMD = o.deliveryDate ? parseToYMD(o.deliveryDate) : null;
-      const pairKey = o.id;
-      if (orderYMD) {
-        const evs = map.get(orderYMD) ?? [];
-        evs.push({ type: "order", supplier, relatedDate: o.status >= 2 ? deliveryYMD : null, pairKey });
-        map.set(orderYMD, evs);
-      }
-      if (deliveryYMD && o.status >= 2) {
-        const evs = map.get(deliveryYMD) ?? [];
-        evs.push({ type: "delivery", supplier, relatedDate: orderYMD, pairKey });
-        map.set(deliveryYMD, evs);
-      }
+      if (!deliveryYMD) continue;
+      const supplier = o.supplierName || "Unknown";
+      const evs = map.get(deliveryYMD) ?? [];
+      evs.push({ supplier, pairKey: o.id, items: o.items });
+      map.set(deliveryYMD, evs);
     }
     return map;
   }, [orders]);
 
-  const threeWeekDays = useMemo(() => getThreeWeekDays(), []);
+  const twoWeekDays = useMemo(() => getTwoWeekDays(), []);
 
   function weekRangeLabel(days: string[]): string {
     const [, m1, d1] = days[0].split("-");
@@ -128,24 +135,11 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
         <div className="space-y-0.5">
           {events.map((ev, ei) => {
             const colors = supplierColorMap.get(ev.supplier) ?? CAL_PALETTE[0];
-            const isActive = hoveredPairKey === ev.pairKey;
-            const isDimmed = hoveredPairKey !== null && !isActive;
-            const tooltipText = ev.type === "order"
-              ? (ev.relatedDate ? t("orders.tooltipDelivery", { dates: fmtYMD(ev.relatedDate, lang) }) : t("orders.tooltipNoDelivery"))
-              : (ev.relatedDate ? t("orders.tooltipOrder", { dates: fmtYMD(ev.relatedDate, lang) }) : t("orders.tooltipNoOrder"));
             return (
-              <div key={ei} className="relative group/chip" onMouseEnter={() => setHoveredPairKey(ev.pairKey)} onMouseLeave={() => setHoveredPairKey(null)}>
-                <div className={[ev.type === "order" ? colors.order : colors.delivery, "text-xs rounded px-2 py-0.5 truncate leading-5 cursor-default transition-all", isActive ? `ring-2 ring-offset-1 ${colors.ring} shadow-md font-semibold` : "", isDimmed ? "opacity-20" : ""].join(" ")}>
-                  {ev.type === "order" ? t("orders.orderLabel") : t("orders.deliveryLabel")}{supplierShort(ev.supplier)}
-                </div>
-                <div className="absolute bottom-full left-0 mb-1 z-50 hidden group-hover/chip:block pointer-events-none">
-                  <div className="bg-slate-800 text-white rounded-lg px-3 py-2 shadow-xl text-[11px] leading-5 min-w-max max-w-[220px]">
-                    <div className="font-semibold truncate">{ev.supplier}</div>
-                    <div className="text-slate-300">{tooltipText}</div>
-                  </div>
-                  <div className="w-2 h-2 bg-slate-800 rotate-45 ml-3 -mt-1" />
-                </div>
-              </div>
+              <button key={ei} onClick={() => setSelectedEvent({ ...ev, deliveryDate: ymd })}
+                className={`${colors.delivery} w-full text-xs rounded px-2 py-0.5 truncate leading-5 cursor-pointer hover:opacity-85 active:opacity-75 transition-opacity text-left`}>
+                {supplierShort(ev.supplier)}
+              </button>
             );
           })}
         </div>
@@ -153,41 +147,79 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
     );
   }
 
-  const weekLabels = lang === "en"
-    ? ["Last week", "This week", "Next week"]
-    : ["上周", "本周", "下周"];
-  const weekStyles = [
-    "text-slate-400 bg-slate-50/80",
-    "text-orange-600 bg-orange-50",
-    "text-slate-500 bg-slate-50",
-  ];
+  const weekLabels = lang === "en" ? ["This week", "Next week"] : ["本周", "下周"];
+  const weekStyles = ["text-orange-600 bg-orange-50", "text-slate-500 bg-slate-50"];
 
   return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-sm mb-6">
-      <div className="grid grid-cols-7 border-b border-slate-100">
-        {DOW_NAMES.map(d => <div key={d} className="text-center text-xs text-slate-400 py-2 font-medium">{d}</div>)}
-      </div>
-      {[0, 1, 2].map(w => (
-        <div key={w}>
-          <div className={`px-4 py-1.5 border-b border-slate-100 text-xs font-medium flex items-center gap-2 ${weekStyles[w]}`}>
-            <span>{weekLabels[w]}</span>
-            <span className="font-normal opacity-70">{weekRangeLabel(threeWeekDays.slice(w * 7, w * 7 + 7))}</span>
-          </div>
-          <div className="grid grid-cols-7 border-l border-slate-100">
-            {threeWeekDays.slice(w * 7, w * 7 + 7).map(ymd => renderCell(ymd))}
-          </div>
+    <>
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm mb-6">
+        <div className="grid grid-cols-7 border-b border-slate-100">
+          {DOW_NAMES.map(d => <div key={d} className="text-center text-xs text-slate-400 py-2 font-medium">{d}</div>)}
         </div>
-      ))}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 py-3 border-t border-slate-100">
-        {[...supplierColorMap.entries()].map(([supplier, colors]) => (
-          <div key={supplier} className="flex items-center gap-1.5 text-xs text-slate-500">
-            <span className={`w-2.5 h-2.5 rounded-sm flex-shrink-0 ${colors.dot}`} />
-            {supplierShort(supplier)}
+        {[0, 1].map(w => (
+          <div key={w}>
+            <div className={`px-4 py-1.5 border-b border-slate-100 text-xs font-medium flex items-center gap-2 ${weekStyles[w]}`}>
+              <span>{weekLabels[w]}</span>
+              <span className="font-normal opacity-70">{weekRangeLabel(twoWeekDays.slice(w * 7, w * 7 + 7))}</span>
+            </div>
+            <div className="grid grid-cols-7 border-l border-slate-100">
+              {twoWeekDays.slice(w * 7, w * 7 + 7).map(ymd => renderCell(ymd))}
+            </div>
           </div>
         ))}
-        <div className="ml-auto text-xs text-slate-400">{t("orders.calLegend")}</div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 py-3 border-t border-slate-100">
+          {[...supplierColorMap.entries()].map(([supplier, colors]) => (
+            <div key={supplier} className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className={`w-2.5 h-2.5 rounded-sm flex-shrink-0 ${colors.dot}`} />
+              {supplierShort(supplier)}
+            </div>
+          ))}
+          <div className="ml-auto text-xs text-slate-400">{lang === "en" ? "Click to view items" : "点击查看商品明细"}</div>
+        </div>
       </div>
-    </div>
+
+      {selectedEvent && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedEvent(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div>
+                <p className="font-semibold text-slate-800">{selectedEvent.supplier}</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {lang === "en" ? "Delivery: " : "配送日期："}{fmtYMD(selectedEvent.deliveryDate, lang)}
+                </p>
+              </div>
+              <button onClick={() => setSelectedEvent(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4 max-h-80 overflow-y-auto">
+              {selectedEvent.items.length === 0 ? (
+                <p className="text-center text-slate-400 text-sm py-4">{t("orders.noItems")}</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-slate-400 text-xs border-b border-slate-100">
+                      <th className="text-left pb-2 font-medium">{t("orders.col.name")}</th>
+                      <th className="text-right pb-2 font-medium">{t("orders.col.qty")}</th>
+                      <th className="text-left pb-2 pl-2 font-medium">{t("orders.col.unit")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {selectedEvent.items.map(item => (
+                      <tr key={item.id}>
+                        <td className="py-2 text-slate-700">{item.itemName}</td>
+                        <td className="py-2 text-right font-semibold text-slate-800">{item.quantity}</td>
+                        <td className="py-2 pl-2 text-slate-500">{item.uom}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -258,23 +290,23 @@ export default function SushiOrdersPage() {
   const orderedOrders = orders.filter(o => o.status >= 2 && o.items.length > 0);
   const pendingOrders = orders.filter(o => o.status === 1);
 
-  const weekBounds = useMemo(() => {
-    const days = getThreeWeekDays();
-    return { thisStart: days[7], thisEnd: days[13], nextStart: days[14], nextEnd: days[20] };
-  }, []);
+  const weekBounds = useMemo(() => getWeekBounds(), []);
   const todayYMD = new Date().toISOString().slice(0, 10);
+
   const thisWeekDelivered = useMemo(() =>
     orders.filter(o => {
       if (o.status < 2 || !o.deliveryDate) return false;
       const ymd = parseToYMD(o.deliveryDate);
       return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd && ymd <= todayYMD;
-    }).length, [orders, weekBounds]);
+    }).length, [orders, weekBounds, todayYMD]);
+
   const thisWeekPending = useMemo(() =>
     orders.filter(o => {
       if (o.status < 2 || !o.deliveryDate) return false;
       const ymd = parseToYMD(o.deliveryDate);
       return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd && ymd > todayYMD;
-    }).length, [orders, weekBounds]);
+    }).length, [orders, weekBounds, todayYMD]);
+
   const nextWeekNeedOrder = useMemo(() =>
     orders.filter(o => {
       if (o.status !== 1 || !o.orderDate) return false;
