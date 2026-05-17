@@ -57,12 +57,27 @@ function fmtYMD(ymd: string, lang: string): string {
   return `${parseInt(m)}月${parseInt(d)}日`;
 }
 
+function getThreeWeekDays(): string[] {
+  const now = new Date();
+  const dow = now.getDay();
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  const lastMonday = new Date(now);
+  lastMonday.setDate(now.getDate() + mondayOffset - 7);
+  lastMonday.setHours(0, 0, 0, 0);
+  const days: string[] = [];
+  for (let i = 0; i < 21; i++) {
+    const d = new Date(lastMonday);
+    d.setDate(lastMonday.getDate() + i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
 function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
   const { lang, t } = useLanguage();
   const now = new Date();
   const todayKey = now.toISOString().slice(0, 10);
   const [hoveredPairKey, setHoveredPairKey] = useState<string | null>(null);
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const DOW_NAMES = lang === "en" ? DOW_EN : DOW_ZH;
 
   const supplierColorMap = useMemo(() => {
@@ -94,21 +109,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
     return map;
   }, [orders]);
 
-  // 本周一开始的 14 天（本周 + 下周）
-  const twoWeekDays = useMemo(() => {
-    const dow = now.getDay();
-    const mondayOffset = dow === 0 ? -6 : 1 - dow;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() + mondayOffset);
-    monday.setHours(0, 0, 0, 0);
-    const days: string[] = [];
-    for (let i = 0; i < 14; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      days.push(d.toISOString().slice(0, 10));
-    }
-    return days;
-  }, []);
+  const threeWeekDays = useMemo(() => getThreeWeekDays(), []);
 
   function weekRangeLabel(days: string[]): string {
     const [, m1, d1] = days[0].split("-");
@@ -121,15 +122,11 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
     const day = parseInt(ymd.split("-")[2]);
     const events = dayMap.get(ymd) ?? [];
     const isToday = ymd === todayKey;
-    const MAX_VISIBLE = 4;
-    const isExpanded = expandedDays.has(ymd);
-    const visibleEvents = events.length > MAX_VISIBLE && !isExpanded ? events.slice(0, MAX_VISIBLE) : events;
-    const hiddenCount = events.length - MAX_VISIBLE;
     return (
       <div key={ymd} className="min-h-[72px] md:min-h-[100px] border-r border-b border-slate-100 p-1.5">
         <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full mx-auto ${isToday ? "bg-orange-500 text-white" : "text-slate-500"}`}>{day}</div>
         <div className="space-y-0.5">
-          {visibleEvents.map((ev, ei) => {
+          {events.map((ev, ei) => {
             const colors = supplierColorMap.get(ev.supplier) ?? CAL_PALETTE[0];
             const isActive = hoveredPairKey === ev.pairKey;
             const isDimmed = hoveredPairKey !== null && !isActive;
@@ -151,42 +148,36 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
               </div>
             );
           })}
-          {events.length > MAX_VISIBLE && !isExpanded && (
-            <button onClick={() => setExpandedDays(prev => { const next = new Set(prev); next.add(ymd); return next; })}
-              className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 leading-4 pt-0.5">
-              +{hiddenCount} {lang === "en" ? "more" : "更多"}
-            </button>
-          )}
-          {events.length > MAX_VISIBLE && isExpanded && (
-            <button onClick={() => setExpandedDays(prev => { const next = new Set(prev); next.delete(ymd); return next; })}
-              className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 leading-4 pt-0.5">
-              {lang === "en" ? "collapse" : "收起"}
-            </button>
-          )}
         </div>
       </div>
     );
   }
+
+  const weekLabels = lang === "en"
+    ? ["Last week", "This week", "Next week"]
+    : ["上周", "本周", "下周"];
+  const weekStyles = [
+    "text-slate-400 bg-slate-50/80",
+    "text-orange-600 bg-orange-50",
+    "text-slate-500 bg-slate-50",
+  ];
 
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm mb-6">
       <div className="grid grid-cols-7 border-b border-slate-100">
         {DOW_NAMES.map(d => <div key={d} className="text-center text-xs text-slate-400 py-2 font-medium">{d}</div>)}
       </div>
-      <div className="px-4 py-1.5 bg-orange-50 border-b border-slate-100 text-xs font-medium text-orange-600 flex items-center gap-2">
-        <span>{lang === "en" ? "This week" : "本周"}</span>
-        <span className="font-normal text-orange-400">{weekRangeLabel(twoWeekDays.slice(0, 7))}</span>
-      </div>
-      <div className="grid grid-cols-7 border-l border-slate-100">
-        {twoWeekDays.slice(0, 7).map(ymd => renderCell(ymd))}
-      </div>
-      <div className="px-4 py-1.5 bg-slate-50 border-y border-slate-100 text-xs font-medium text-slate-500 flex items-center gap-2">
-        <span>{lang === "en" ? "Next week" : "下周"}</span>
-        <span className="font-normal text-slate-400">{weekRangeLabel(twoWeekDays.slice(7, 14))}</span>
-      </div>
-      <div className="grid grid-cols-7 border-l border-slate-100">
-        {twoWeekDays.slice(7, 14).map(ymd => renderCell(ymd))}
-      </div>
+      {[0, 1, 2].map(w => (
+        <div key={w}>
+          <div className={`px-4 py-1.5 border-b border-slate-100 text-xs font-medium flex items-center gap-2 ${weekStyles[w]}`}>
+            <span>{weekLabels[w]}</span>
+            <span className="font-normal opacity-70">{weekRangeLabel(threeWeekDays.slice(w * 7, w * 7 + 7))}</span>
+          </div>
+          <div className="grid grid-cols-7 border-l border-slate-100">
+            {threeWeekDays.slice(w * 7, w * 7 + 7).map(ymd => renderCell(ymd))}
+          </div>
+        </div>
+      ))}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 py-3 border-t border-slate-100">
         {[...supplierColorMap.entries()].map(([supplier, colors]) => (
           <div key={supplier} className="flex items-center gap-1.5 text-xs text-slate-500">
@@ -266,6 +257,24 @@ export default function SushiOrdersPage() {
 
   const orderedOrders = orders.filter(o => o.status >= 2 && o.items.length > 0);
   const pendingOrders = orders.filter(o => o.status === 1);
+
+  const weekBounds = useMemo(() => {
+    const days = getThreeWeekDays();
+    return { thisStart: days[7], thisEnd: days[13], nextStart: days[14], nextEnd: days[20] };
+  }, []);
+  const thisWeekDeliveries = useMemo(() =>
+    orders.filter(o => {
+      if (o.status < 2 || !o.deliveryDate) return false;
+      const ymd = parseToYMD(o.deliveryDate);
+      return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd;
+    }).length, [orders, weekBounds]);
+  const nextWeekDeliveries = useMemo(() =>
+    orders.filter(o => {
+      if (o.status < 2 || !o.deliveryDate) return false;
+      const ymd = parseToYMD(o.deliveryDate);
+      return ymd && ymd >= weekBounds.nextStart && ymd <= weekBounds.nextEnd;
+    }).length, [orders, weekBounds]);
+
   const lastSync = orders.length > 0
     ? orders.reduce((a, b) => a.syncedAt > b.syncedAt ? a : b).syncedAt
     : null;
@@ -297,9 +306,9 @@ export default function SushiOrdersPage() {
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: t("orders.stat.total"), value: orders.length, color: "text-orange-600" },
-          { label: t("orders.stat.ordered"), value: orderedOrders.length, color: "text-green-600" },
-          { label: t("orders.stat.pending"), value: pendingOrders.length, color: "text-red-500" },
+          { label: t("orders.stat.total"), value: pendingOrders.length, color: "text-red-500" },
+          { label: t("orders.stat.ordered"), value: thisWeekDeliveries, color: "text-blue-600" },
+          { label: t("orders.stat.pending"), value: nextWeekDeliveries, color: "text-orange-500" },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
             <p className="text-xs text-slate-400 mb-1">{label}</p>
