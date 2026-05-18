@@ -295,13 +295,13 @@ export default function SushiOrdersPage() {
 
   const todayDeliveries = useMemo(() =>
     orders.filter(o => {
-      if (o.status < 2 || !o.deliveryDate) return false;
+      if (o.status < 2 || !o.deliveryDate || o.items.length === 0) return false;
       return parseToYMD(o.deliveryDate) === todayYMD;
     }).length, [orders, todayYMD]);
 
   const pendingDeliveries = useMemo(() =>
     orders.filter(o => {
-      if (o.status < 2 || !o.deliveryDate) return false;
+      if (o.status < 2 || !o.deliveryDate || o.items.length === 0) return false;
       const ymd = parseToYMD(o.deliveryDate);
       return ymd && ymd > todayYMD;
     }).length, [orders, todayYMD]);
@@ -314,11 +314,14 @@ export default function SushiOrdersPage() {
     }).length, [orders, weekBounds]);
 
   const pendingOrders = useMemo(() =>
-    orders.filter(o => {
-      if (o.status !== 1 || !o.orderDate) return false;
-      const ymd = parseToYMD(o.orderDate);
-      return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd;
-    }), [orders, weekBounds]);
+    orders
+      .filter(o => {
+        if (o.status !== 1 || !o.orderDate) return false;
+        const ymd = parseToYMD(o.orderDate);
+        return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd;
+      })
+      .sort((a, b) => (parseToYMD(a.orderDate!) ?? "").localeCompare(parseToYMD(b.orderDate!) ?? "")),
+    [orders, weekBounds]);
 
   const lastSync = orders.length > 0
     ? orders.reduce((a, b) => a.syncedAt > b.syncedAt ? a : b).syncedAt

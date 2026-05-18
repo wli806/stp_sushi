@@ -379,7 +379,11 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
   const todayNZ  = nzNow.toISOString().slice(0, 10);
   const tomorrowNZ = new Date(nzNow.getTime() + 86400000).toISOString().slice(0, 10);
 
-  const deliveryOrders = await prisma.sushiOrder.findMany({ where: { status: { gte: 2 } } });
+  // 与日历相同逻辑：status >= 2 且有商品明细
+  const deliveryOrders = await prisma.sushiOrder.findMany({
+    where: { status: { gte: 2 } },
+    include: { items: true },
+  });
 
   function matchDate(raw: string | null, target: string): boolean {
     if (!raw) return false;
@@ -387,8 +391,8 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
     return ymd === target;
   }
 
-  const todayList   = deliveryOrders.filter(o => matchDate(o.deliveryDate, todayNZ)).map(o => o.supplierName);
-  const tomorrowList = deliveryOrders.filter(o => matchDate(o.deliveryDate, tomorrowNZ)).map(o => o.supplierName);
+  const todayList    = deliveryOrders.filter(o => o.items.length > 0 && matchDate(o.deliveryDate, todayNZ)).map(o => o.supplierName);
+  const tomorrowList = deliveryOrders.filter(o => o.items.length > 0 && matchDate(o.deliveryDate, tomorrowNZ)).map(o => o.supplierName);
 
   if (todayList.length > 0) {
     const unique = [...new Set(todayList)];

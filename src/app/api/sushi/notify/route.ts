@@ -47,10 +47,13 @@ export async function GET(request: NextRequest) {
     else later.push(o);
   }
 
-  // 明日到货订单（按配送日期，已下单/已确认）
-  const allOrders = await prisma.sushiOrder.findMany({ where: { status: { gte: 2 } } });
-  const tomorrowDeliveries = allOrders.filter(o => o.deliveryDate && parseToYMD(o.deliveryDate) === tomorrow);
-  const todayDeliveries = allOrders.filter(o => o.deliveryDate && parseToYMD(o.deliveryDate) === today);
+  // 到货订单：与日历相同逻辑 — status >= 2 且有商品明细
+  const allOrders = await prisma.sushiOrder.findMany({
+    where: { status: { gte: 2 } },
+    include: { items: true },
+  });
+  const tomorrowDeliveries = allOrders.filter(o => o.items.length > 0 && o.deliveryDate && parseToYMD(o.deliveryDate) === tomorrow);
+  const todayDeliveries    = allOrders.filter(o => o.items.length > 0 && o.deliveryDate && parseToYMD(o.deliveryDate) === today);
 
   const hasAnything = urgent.length > 0 || soon.length > 0 || later.length > 0 || tomorrowDeliveries.length > 0 || todayDeliveries.length > 0;
   if (!hasAnything) {
