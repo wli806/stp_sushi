@@ -6,6 +6,7 @@ import { useLanguage } from "@/components/LanguageProvider";
 
 interface WeeklyReport {
   id: string;
+  title: string;
   weekFrom: string;
   weekTo: string;
   storeName: string;
@@ -18,7 +19,10 @@ interface WeeklyReport {
   createdAt: string;
 }
 
+const DEFAULT_TITLE = "Weekly Manager Report: 1% Project";
+
 const EMPTY_FORM = {
+  title: DEFAULT_TITLE,
   weekFrom: "",
   weekTo: "",
   storeName: "",
@@ -69,6 +73,7 @@ export default function ImprovementPage() {
     setSelected(r);
     setIsNew(false);
     setForm({
+      title: r.title || DEFAULT_TITLE,
       weekFrom: r.weekFrom,
       weekTo: r.weekTo,
       storeName: r.storeName,
@@ -204,11 +209,14 @@ export default function ImprovementPage() {
           <div className="p-6 max-w-3xl mx-auto">
             {/* 标题栏 */}
             <div className="flex items-center justify-between mb-6">
-              <div>
-                <h1 className="text-lg font-bold text-slate-800">
-                  Weekly Manager Report: 1% Project
-                </h1>
-                <p className="text-xs text-slate-400 mt-0.5">
+              <div className="flex-1 min-w-0 mr-4">
+                <input
+                  className="text-lg font-bold text-slate-800 bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none w-full transition-colors pb-0.5"
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder={DEFAULT_TITLE}
+                />
+                <p className="text-xs text-slate-400 mt-1">
                   {isNew
                     ? (lang === "zh" ? "新建周报" : "New Report")
                     : (lang === "zh" ? `由 ${selected?.createdBy || "—"} 创建` : `Created by ${selected?.createdBy || "—"}`)}

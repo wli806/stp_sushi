@@ -10,6 +10,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const report = await prisma.weeklyReport.update({
       where: { id },
       data: {
+        title: data.title || "Weekly Manager Report: 1% Project",
         weekFrom: data.weekFrom,
         weekTo: data.weekTo,
         storeName: data.storeName || "",

@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     }
     const report = await prisma.weeklyReport.create({
       data: {
+        title: data.title || "Weekly Manager Report: 1% Project",
         weekFrom: data.weekFrom,
         weekTo: data.weekTo,
         storeName: data.storeName || "",

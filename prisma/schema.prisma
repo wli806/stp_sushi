@@ -93,6 +93,7 @@ model TrainingRecord {
 
 model WeeklyReport {
   id                  String   @id @default(cuid())
+  title               String   @default("Weekly Manager Report: 1% Project")
   weekFrom            String
   weekTo              String
   storeName           String   @default("")
