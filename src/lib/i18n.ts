@@ -148,9 +148,9 @@ const translations = {
     "training.checklist.unsign": "取消",
     "training.checklist.confirmUnsign": "确认取消此项签到？",
 
-    // 持续改进
-    "sidebar.improvement": "持续改进",
-    "improvement.title": "持续改进周报",
+    // 1% Project
+    "sidebar.improvement": "1% Project",
+    "improvement.title": "1% Project 周报",
     "improvement.newReport": "新建周报",
     "improvement.noReports": "暂无周报，点击「新建周报」开始",
     "improvement.createdBy": "由 {name} 创建",
@@ -297,9 +297,9 @@ const translations = {
     "inventory.modal.edit": "Edit — {name}",
     "inventory.confirmDelete": "Delete \"{name}\"?",
 
-    // Constant Improvement
-    "sidebar.improvement": "Improvement",
-    "improvement.title": "Constant Improvement",
+    // 1% Project
+    "sidebar.improvement": "1% Project",
+    "improvement.title": "1% Project",
     "improvement.newReport": "New Report",
     "improvement.noReports": "No reports yet — click New Report",
     "improvement.createdBy": "Created by {name}",

@@ -140,7 +140,7 @@ export default function ImprovementPage() {
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp size={18} className="text-blue-600" />
             <h2 className="font-semibold text-slate-800 text-sm">
-              {lang === "zh" ? "持续改进周报" : "Constant Improvement"}
+              1% Project
             </h2>
           </div>
           <button
@@ -206,7 +206,7 @@ export default function ImprovementPage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-lg font-bold text-slate-800">
-                  Weekly Manager Report: Constant Improvement
+                  Weekly Manager Report: 1% Project
                 </h1>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {isNew
