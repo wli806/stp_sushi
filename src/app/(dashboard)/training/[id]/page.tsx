@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Plus, Trash2, GraduationCap, ClipboardList } from "lucide-react";
+import { ChevronLeft, Plus, Trash2, GraduationCap, ClipboardList, Pencil } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
 // ── Checklist definition ──────────────────────────────────────────────────────
@@ -209,6 +209,30 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
   const [staff, setStaff] = useState<StaffDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Edit staff info modal
+  const [showEditStaff, setShowEditStaff] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", position: "", store: "", trainerName: "", startDate: "", notes: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  function openEditStaff() {
+    if (!staff) return;
+    setEditForm({ name: staff.name, position: staff.position, store: staff.store, trainerName: staff.trainerName, startDate: staff.startDate, notes: staff.notes ?? "" });
+    setShowEditStaff(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!editForm.name || !editForm.startDate) return;
+    setSavingEdit(true);
+    await fetch(`/api/training/staff/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editForm),
+    });
+    setSavingEdit(false);
+    setShowEditStaff(false);
+    load();
+  }
+
   // Task records modal
   const [taskModal, setTaskModal] = useState<{ key: string; label: string } | null>(null);
   const [showAddTaskRecord, setShowAddTaskRecord] = useState(false);
@@ -288,10 +312,15 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
           <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
             <GraduationCap size={22} className="text-orange-500" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-bold text-slate-800">{staff.name}</h1>
             <p className="text-slate-500 text-sm">{staff.position}{staff.store ? ` · ${staff.store}` : ""} · {lang === "en" ? "Start" : "入职"} {staff.startDate}</p>
           </div>
+          <button onClick={openEditStaff}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors flex-shrink-0">
+            <Pencil size={13} />
+            {lang === "en" ? "Edit" : "编辑"}
+          </button>
         </div>
       </div>
 
@@ -391,6 +420,57 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
               )}
             </div>
           )}
+        </Modal>
+      )}
+
+      {/* ── Edit Staff Modal ─────────────────────────────────────────────────── */}
+      {showEditStaff && (
+        <Modal title={lang === "en" ? "Edit Staff Info" : "编辑员工信息"} onClose={() => setShowEditStaff(false)}>
+          {(() => {
+            const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500";
+            return (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">{t("training.form.name")} *</label>
+                  <input className={inputCls} value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">{t("training.form.position")}</label>
+                    <input className={inputCls} value={editForm.position} onChange={e => setEditForm(f => ({ ...f, position: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">{t("training.form.store")}</label>
+                    <input className={inputCls} value={editForm.store} onChange={e => setEditForm(f => ({ ...f, store: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">{t("training.form.startDate")} *</label>
+                    <input type="date" className={inputCls} value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">{t("training.form.trainer")}</label>
+                    <input className={inputCls} value={editForm.trainerName} onChange={e => setEditForm(f => ({ ...f, trainerName: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">{t("common.notes")}</label>
+                  <textarea className={`${inputCls} resize-none`} rows={2} value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button onClick={() => setShowEditStaff(false)}
+                    className="flex-1 border border-slate-200 text-slate-600 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors">
+                    {t("common.cancel")}
+                  </button>
+                  <button onClick={handleSaveEdit} disabled={savingEdit || !editForm.name || !editForm.startDate}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white py-2 rounded-lg text-sm font-medium transition-colors">
+                    {savingEdit ? t("common.saving") : t("common.save")}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </Modal>
       )}
     </div>
