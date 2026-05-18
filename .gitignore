@@ -43,3 +43,7 @@ next-env.d.ts
 
 # prisma generated
 src/generated/
+
+# Claude Code local config
+.claude/
+*.bundle
