@@ -104,7 +104,8 @@ export default function GoodsReceivingPage() {
     }
   }
 
-  function openOSS() {
+  function openOSS(poNumber?: string | null) {
+    if (poNumber) fallbackCopy(poNumber);
     window.open(OSS_GR_URL, "_blank", "noopener,noreferrer");
   }
 
@@ -271,7 +272,8 @@ export default function GoodsReceivingPage() {
                 <p className="text-xs text-slate-400 mb-0.5">PO #</p>
                 {invoice.poNumber ? (
                   <button
-                    onClick={openOSS}
+                    onClick={() => openOSS(invoice.poNumber)}
+                    title={lang === "en" ? "Copy PO# & open OSS Goods Receiving" : "复制 PO# 并打开 OSS 收货页"}
                     className="font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2 flex items-center gap-1"
                   >
                     {invoice.poNumber}
@@ -335,10 +337,10 @@ export default function GoodsReceivingPage() {
                       {order.deliveryDate && <span>{lang === "en" ? "Delivery:" : "配送:"} {order.deliveryDate}</span>}
                     </div>
                   </div>
-                  <button onClick={openOSS}
+                  <button onClick={() => openOSS(order?.poNumber)}
                     className="flex items-center gap-1.5 text-xs bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 transition-colors flex-shrink-0">
                     <ExternalLink size={12} />
-                    {lang === "en" ? "Open OSS Goods Receiving" : "打开 OSS 收货模块"}
+                    {lang === "en" ? "Copy PO# & Open OSS" : "复制 PO# 并打开 OSS"}
                   </button>
                 </div>
               </div>
@@ -418,14 +420,14 @@ export default function GoodsReceivingPage() {
                       ? "Review the comparison above, then go to OSS Goods Receiving to confirm receipt."
                       : "对比完成后，前往 OSS 收货模块，按建议操作 Full / Change QTY。"}
                   </p>
-                  <button onClick={openOSS}
+                  <button onClick={() => openOSS(order?.poNumber)}
                     className={`flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-xl transition-colors flex-shrink-0 ${
                       allFull
                         ? "bg-green-500 hover:bg-green-600 text-white"
                         : "bg-amber-500 hover:bg-amber-600 text-white"
                     }`}>
                     <ExternalLink size={14} />
-                    {lang === "en" ? "Go to OSS Goods Receiving" : "前往 OSS 确认收货"}
+                    {lang === "en" ? "Copy PO# & Go to OSS" : "复制 PO# 并前往 OSS"}
                   </button>
                 </div>
               </div>
