@@ -81,11 +81,31 @@ export default function GoodsReceivingPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  function fallbackCopy(val: string) {
+    const el = document.createElement("textarea");
+    el.value = val;
+    el.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+    document.body.appendChild(el);
+    el.focus();
+    el.select();
+    try { document.execCommand("copy"); } catch { /* ignore */ }
+    document.body.removeChild(el);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   function copyInvoiceNo(val: string) {
-    navigator.clipboard.writeText(val).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(val)
+        .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })
+        .catch(() => fallbackCopy(val));
+    } else {
+      fallbackCopy(val);
+    }
+  }
+
+  function openOSS() {
+    window.open(OSS_GR_URL, "_blank", "noopener,noreferrer");
   }
 
   function readFile(file: File) {
@@ -250,15 +270,13 @@ export default function GoodsReceivingPage() {
               <div>
                 <p className="text-xs text-slate-400 mb-0.5">PO #</p>
                 {invoice.poNumber ? (
-                  <a
-                    href={OSS_GR_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={openOSS}
                     className="font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2 flex items-center gap-1"
                   >
                     {invoice.poNumber}
                     <ExternalLink size={11} className="flex-shrink-0" />
-                  </a>
+                  </button>
                 ) : <p className="font-semibold text-slate-800">—</p>}
               </div>
               <div>
@@ -317,11 +335,11 @@ export default function GoodsReceivingPage() {
                       {order.deliveryDate && <span>{lang === "en" ? "Delivery:" : "配送:"} {order.deliveryDate}</span>}
                     </div>
                   </div>
-                  <a href={ossUrl} target="_blank" rel="noopener noreferrer"
+                  <button onClick={openOSS}
                     className="flex items-center gap-1.5 text-xs bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 transition-colors flex-shrink-0">
                     <ExternalLink size={12} />
                     {lang === "en" ? "Open OSS Goods Receiving" : "打开 OSS 收货模块"}
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -400,7 +418,7 @@ export default function GoodsReceivingPage() {
                       ? "Review the comparison above, then go to OSS Goods Receiving to confirm receipt."
                       : "对比完成后，前往 OSS 收货模块，按建议操作 Full / Change QTY。"}
                   </p>
-                  <a href={ossUrl} target="_blank" rel="noopener noreferrer"
+                  <button onClick={openOSS}
                     className={`flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-xl transition-colors flex-shrink-0 ${
                       allFull
                         ? "bg-green-500 hover:bg-green-600 text-white"
@@ -408,7 +426,7 @@ export default function GoodsReceivingPage() {
                     }`}>
                     <ExternalLink size={14} />
                     {lang === "en" ? "Go to OSS Goods Receiving" : "前往 OSS 确认收货"}
-                  </a>
+                  </button>
                 </div>
               </div>
 
