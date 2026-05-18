@@ -14,6 +14,7 @@ import {
   CalendarClock,
   GraduationCap,
   PackageCheck,
+  TrendingUp,
   ChevronDown,
   Menu,
   X,
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
     ],
   },
   { href: "/training", labelKey: "sidebar.training", icon: GraduationCap, roles: ["OWNER", "MANAGER", "VIEWER"] },
+  { href: "/improvement", labelKey: "sidebar.improvement", icon: TrendingUp, roles: ["OWNER", "MANAGER", "VIEWER"] },
   { href: "/settings", labelKey: "sidebar.users", icon: Settings, roles: ["OWNER"], rootOnly: true },
 ];
 

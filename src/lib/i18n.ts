@@ -148,6 +148,14 @@ const translations = {
     "training.checklist.unsign": "取消",
     "training.checklist.confirmUnsign": "确认取消此项签到？",
 
+    // 持续改进
+    "sidebar.improvement": "持续改进",
+    "improvement.title": "持续改进周报",
+    "improvement.newReport": "新建周报",
+    "improvement.noReports": "暂无周报，点击「新建周报」开始",
+    "improvement.createdBy": "由 {name} 创建",
+    "improvement.confirmDelete": "确认删除这份周报？",
+
     // 用户管理
     "settings.title": "用户管理",
     "settings.subtitleRoot": "管理账户权限，控制各角色的可见内容",
@@ -288,6 +296,14 @@ const translations = {
     "inventory.modal.add": "Add Item",
     "inventory.modal.edit": "Edit — {name}",
     "inventory.confirmDelete": "Delete \"{name}\"?",
+
+    // Constant Improvement
+    "sidebar.improvement": "Improvement",
+    "improvement.title": "Constant Improvement",
+    "improvement.newReport": "New Report",
+    "improvement.noReports": "No reports yet — click New Report",
+    "improvement.createdBy": "Created by {name}",
+    "improvement.confirmDelete": "Delete this report?",
 
     // Staff Training
     "sidebar.training": "Staff Training",

@@ -91,6 +91,21 @@ model TrainingRecord {
   staff TrainingStaff @relation(fields: [staffId], references: [id], onDelete: Cascade)
 }
 
+model WeeklyReport {
+  id                  String   @id @default(cuid())
+  weekFrom            String
+  weekTo              String
+  storeName           String   @default("")
+  managerName         String   @default("")
+  lastWeekAchievement String   @default("")
+  focusPoint          String   @default("")
+  actionPlan          String   @default("")
+  peopleFocus         String   @default("")
+  createdBy           String   @default("")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
 model TrainingChecklist {
   id          String @id @default(cuid())
   staffId     String
