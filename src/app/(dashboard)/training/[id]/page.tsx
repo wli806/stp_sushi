@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Plus, Trash2, GraduationCap, ClipboardList, Pencil } from "lucide-react";
+import { ChevronLeft, Plus, Trash2, GraduationCap, ClipboardList, Pencil, StickyNote, Save } from "lucide-react";
 import { useLanguage } from "@/components/LanguageProvider";
 
 // ── Checklist definition ──────────────────────────────────────────────────────
@@ -233,6 +233,31 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
     load();
   }
 
+  // Tab
+  const [activeTab, setActiveTab] = useState<"checklist" | "notes">("checklist");
+
+  // Notes
+  const [notesText, setNotesText] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+
+  async function handleSaveNotes() {
+    setSavingNotes(true);
+    await fetch(`/api/training/staff/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: staff!.name, position: staff!.position, store: staff!.store,
+        trainerName: staff!.trainerName, startDate: staff!.startDate,
+        notes: notesText,
+      }),
+    });
+    setSavingNotes(false);
+    setNotesSaved(true);
+    setTimeout(() => setNotesSaved(false), 2000);
+    load();
+  }
+
   // Task records modal
   const [taskModal, setTaskModal] = useState<{ key: string; label: string } | null>(null);
   const [showAddTaskRecord, setShowAddTaskRecord] = useState(false);
@@ -245,7 +270,11 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
   async function load() {
     setLoading(true);
     const res = await fetch(`/api/training/staff/${id}`);
-    if (res.ok) setStaff(await res.json());
+    if (res.ok) {
+      const data = await res.json();
+      setStaff(data);
+      setNotesText(data.notes ?? "");
+    }
     setLoading(false);
   }
   useEffect(() => { load(); }, [id]);
@@ -341,8 +370,54 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {/* Checklist areas */}
-      {CHECKLIST_AREAS.map(area => (
+      {/* Tabs */}
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-5">
+        <button
+          onClick={() => setActiveTab("checklist")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "checklist" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+        >
+          <ClipboardList size={15} />
+          {lang === "en" ? "Skill Checklist" : "技能清单"}
+        </button>
+        <button
+          onClick={() => setActiveTab("notes")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "notes" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+        >
+          <StickyNote size={15} />
+          {lang === "en" ? "Notes" : "笔记"}
+          {notesText && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0" />}
+        </button>
+      </div>
+
+      {/* ── Notes Tab ───────────────────────────────────────────────────────── */}
+      {activeTab === "notes" && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-slate-700">
+              {lang === "en" ? "Personal Notes" : "个人笔记"}
+            </p>
+            <button
+              onClick={handleSaveNotes}
+              disabled={savingNotes}
+              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${notesSaved ? "bg-green-500 text-white" : "bg-orange-500 hover:bg-orange-600 text-white disabled:bg-orange-300"}`}
+            >
+              <Save size={12} />
+              {savingNotes ? (lang === "en" ? "Saving..." : "保存中...") : notesSaved ? (lang === "en" ? "Saved!" : "已保存") : (lang === "en" ? "Save" : "保存")}
+            </button>
+          </div>
+          <textarea
+            className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none leading-relaxed"
+            rows={16}
+            placeholder={lang === "en" ? "Write notes here — things to remember, personal goals, reminders..." : "在这里写下需要记住的事情、个人目标、提醒事项..."}
+            value={notesText}
+            onChange={e => setNotesText(e.target.value)}
+          />
+          <p className="text-xs text-slate-400 mt-2 text-right">{notesText.length} {lang === "en" ? "chars" : "字"}</p>
+        </div>
+      )}
+
+      {/* ── Checklist Tab ────────────────────────────────────────────────────── */}
+      {activeTab === "checklist" && CHECKLIST_AREAS.map(area => (
         <div key={area.key} className="bg-white rounded-xl border border-slate-100 shadow-sm mb-4 overflow-hidden">
           <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
             <h3 className="font-semibold text-slate-700 text-sm">{lang === "en" ? area.labelEn : area.labelZh}</h3>
@@ -391,7 +466,7 @@ export default function TrainingDetailPage({ params }: { params: Promise<{ id: s
         </div>
       ))}
 
-      {/* ── Task Records Modal ───────────────────────────────────────────────── */}
+      {/* ── Task Records Modal ──────────────────────────────────────────────── */}
       {taskModal && (
         <Modal title={taskModal.label} onClose={() => { setTaskModal(null); setShowAddTaskRecord(false); }}>
           {showAddTaskRecord ? (
