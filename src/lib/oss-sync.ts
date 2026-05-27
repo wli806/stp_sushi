@@ -362,10 +362,17 @@ async function syncGROrders(session: string): Promise<{ synced: number; errors: 
 
   if (items.length === 0) return { synced: 0, errors, debug };
 
+  // Clean up old "gr-" prefixed records from previous sync version
+  const grOssIds = items.map(i => `gr-${i.po_id}`);
+  if (grOssIds.length > 0) {
+    await prisma.sushiOrder.deleteMany({ where: { ossId: { in: grOssIds } } });
+  }
+
   let synced = 0;
   for (const item of items) {
     try {
-      const ossId = `gr-${item.po_id}`;
+      // Use plain po_id so GR sync merges into the same record as weekly sync (no duplicates)
+      const ossId = item.po_id;
       const deliveryDate = parseDeliveryDate(item.delivery_date ?? "");
       const supplierPoNumber = item.supplier_po_number ?? item.po_number ?? "";
 
