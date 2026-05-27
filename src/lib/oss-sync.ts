@@ -337,11 +337,6 @@ async function syncGROrders(session: string): Promise<{ synced: number; errors: 
   const debug: string[] = [];
   const now = new Date();
 
-  // Cover -60 days to +60 days to catch both past and upcoming deliveries
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  const startDate = fmt(new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000));
-  const endDate   = fmt(new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000));
-
   const res = await fetch(`${BASE}/shop/home/goodsReceivingList`, {
     method: "POST",
     headers: {
@@ -350,7 +345,13 @@ async function syncGROrders(session: string): Promise<{ synced: number; errors: 
       "X-Requested-With": "XMLHttpRequest",
       "Referer": `${BASE}/shop/home/goodsreceiving_view`,
     },
-    body: new URLSearchParams({ start_date: startDate, end_date: endDate, supplier_id: "0" }),
+    body: new URLSearchParams({
+      delivery_date: "upcoming",
+      supplier_id: "",
+      gr_status: "OPEN",
+      receiving_status: "",
+      po_number: "",
+    }),
   });
 
   let data: { resultArr?: GRItem[] } = {};
