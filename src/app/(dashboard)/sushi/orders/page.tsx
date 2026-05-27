@@ -60,7 +60,22 @@ const CAL_PALETTE = [
   { order: "bg-orange-100 text-orange-700", delivery: "bg-orange-500 text-white", dot: "bg-orange-500" },
 ];
 
-function supplierShort(name: string): string { return name.split(/[\s\-\[]/)[0].slice(0, 9); }
+// Fixed display label + color overrides for specific suppliers
+const SUPPLIER_CONFIG: Record<string, { label: string; paletteIndex: number }> = {
+  "NZ KING SALMON": { label: "SALMON", paletteIndex: 3 }, // rose = red
+};
+
+// Hash-based stable color — same supplier always gets same color regardless of list order
+function stableColorFor(name: string): typeof CAL_PALETTE[0] {
+  if (SUPPLIER_CONFIG[name] !== undefined) return CAL_PALETTE[SUPPLIER_CONFIG[name].paletteIndex];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  return CAL_PALETTE[Math.abs(h) % CAL_PALETTE.length];
+}
+
+function supplierShort(name: string): string {
+  return SUPPLIER_CONFIG[name]?.label ?? name.split(/[\s\-\[]/)[0].slice(0, 9);
+}
 
 function fmtYMD(ymd: string, lang: string): string {
   const [, m, d] = ymd.split("-");
@@ -110,7 +125,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
   const supplierColorMap = useMemo(() => {
     const unique = [...new Set(orders.map(o => o.supplierName || ""))];
     const map = new Map<string, typeof CAL_PALETTE[0]>();
-    unique.forEach((s, i) => map.set(s, CAL_PALETTE[i % CAL_PALETTE.length]));
+    unique.forEach(s => map.set(s, stableColorFor(s)));
     return map;
   }, [orders]);
 
