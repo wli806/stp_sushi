@@ -60,21 +60,29 @@ const CAL_PALETTE = [
   { order: "bg-orange-100 text-orange-700", delivery: "bg-orange-500 text-white", dot: "bg-orange-500" },
 ];
 
-// Fixed display label + color overrides for specific suppliers
-const SUPPLIER_CONFIG: Record<string, { label: string; paletteIndex: number }> = {
-  "NZ KING SALMON": { label: "SALMON", paletteIndex: 3 }, // rose = red
+// Config keyed by first-word prefix (uppercase) of supplier name
+const SUPPLIER_SHORT_CONFIG: Record<string, { label?: string; paletteIndex: number }> = {
+  "NZ":      { label: "SALMON", paletteIndex: 3 }, // rose = red
+  "INGHAMS": { paletteIndex: 7 },                  // orange
+  "VEGE":    { paletteIndex: 1 },                  // emerald = green
 };
 
-// Hash-based stable color — same supplier always gets same color regardless of list order
+function shortKey(name: string): string {
+  return name.split(/[\s\-\[]/)[0].toUpperCase();
+}
+
+// Hash-based stable color — keyed by first word so all "INGHAMS - *" variants get same color
 function stableColorFor(name: string): typeof CAL_PALETTE[0] {
-  if (SUPPLIER_CONFIG[name] !== undefined) return CAL_PALETTE[SUPPLIER_CONFIG[name].paletteIndex];
+  const key = shortKey(name);
+  if (SUPPLIER_SHORT_CONFIG[key]) return CAL_PALETTE[SUPPLIER_SHORT_CONFIG[key].paletteIndex];
   let h = 0;
-  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  for (let i = 0; i < key.length; i++) h = ((h << 5) - h + key.charCodeAt(i)) | 0;
   return CAL_PALETTE[Math.abs(h) % CAL_PALETTE.length];
 }
 
 function supplierShort(name: string): string {
-  return SUPPLIER_CONFIG[name]?.label ?? name.split(/[\s\-\[]/)[0].slice(0, 9);
+  const key = shortKey(name);
+  return SUPPLIER_SHORT_CONFIG[key]?.label ?? name.split(/[\s\-\[]/)[0].slice(0, 9);
 }
 
 function fmtYMD(ymd: string, lang: string): string {
@@ -210,8 +218,16 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
           </div>
         ))}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 py-3 border-t border-slate-100">
-          {[...supplierColorMap.entries()].map(([supplier, colors]) => (
-            <div key={supplier} className="flex items-center gap-1.5 text-xs text-slate-500">
+          {(() => {
+            const seen = new Set<string>();
+            return [...supplierColorMap.entries()].filter(([s]) => {
+              const label = supplierShort(s);
+              if (seen.has(label)) return false;
+              seen.add(label);
+              return true;
+            });
+          })().map(([supplier, colors]) => (
+            <div key={supplierShort(supplier)} className="flex items-center gap-1.5 text-xs text-slate-500">
               <span className={`w-2.5 h-2.5 rounded-sm flex-shrink-0 ${colors.dot}`} />
               {supplierShort(supplier)}
             </div>
