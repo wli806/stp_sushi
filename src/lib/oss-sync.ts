@@ -317,6 +317,101 @@ async function syncWeekOrders(
   return { synced, errors, debug, newOrders, todayDeliveries, tomorrowDeliveries };
 }
 
+interface GRItem {
+  po_id: string;
+  po_number: string;
+  supplier_po_number: string;
+  supplier_name: string;
+  delivery_date: string;
+  po_status: string;
+  items: {
+    item_name: string;
+    item_code: string;
+    ordered_qty: number;
+    uom_name: string;
+  }[];
+}
+
+async function syncGROrders(session: string): Promise<{ synced: number; errors: string[]; debug: string[] }> {
+  const errors: string[] = [];
+  const debug: string[] = [];
+  const now = new Date();
+
+  // Cover -60 days to +60 days to catch both past and upcoming deliveries
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const startDate = fmt(new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000));
+  const endDate   = fmt(new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000));
+
+  const res = await fetch(`${BASE}/shop/home/goodsReceivingList`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "Cookie": `ci_session=${session}`,
+      "X-Requested-With": "XMLHttpRequest",
+      "Referer": `${BASE}/shop/home/goodsreceiving_view`,
+    },
+    body: new URLSearchParams({ start_date: startDate, end_date: endDate, supplier_id: "0" }),
+  });
+
+  let data: { resultArr?: GRItem[] } = {};
+  try { data = await res.json(); } catch { /* non-JSON response */ }
+
+  const items: GRItem[] = Array.isArray(data.resultArr) ? data.resultArr : [];
+  debug.push(`GR sync: HTTP ${res.status}, ${items.length} orders returned`);
+
+  if (items.length === 0) return { synced: 0, errors, debug };
+
+  let synced = 0;
+  for (const item of items) {
+    try {
+      const ossId = `gr-${item.po_id}`;
+      const deliveryDate = parseDeliveryDate(item.delivery_date ?? "");
+      const supplierPoNumber = item.supplier_po_number ?? item.po_number ?? "";
+
+      const dbOrder = await prisma.sushiOrder.upsert({
+        where: { ossId },
+        update: {
+          poNumber: supplierPoNumber,
+          supplierName: item.supplier_name ?? "",
+          status: Math.max(2, parseInt(item.po_status ?? "2") || 2),
+          deliveryDate,
+          syncedAt: new Date(),
+        },
+        create: {
+          ossId,
+          poNumber: supplierPoNumber,
+          supplierName: item.supplier_name ?? "",
+          status: Math.max(2, parseInt(item.po_status ?? "2") || 2),
+          deliveryDate,
+          poDate: deliveryDate,
+          orderDate: null,
+          weekNo: null,
+          year: null,
+        },
+      });
+
+      await prisma.sushiOrderItem.deleteMany({ where: { orderId: dbOrder.id } });
+      if (Array.isArray(item.items) && item.items.length > 0) {
+        await prisma.sushiOrderItem.createMany({
+          data: item.items.map(i => ({
+            orderId: dbOrder.id,
+            ossItemId: i.item_code ?? "",
+            itemCode: i.item_code ?? "",
+            itemName: i.item_name ?? "",
+            uom: i.uom_name ?? "",
+            quantity: Number(i.ordered_qty ?? 0),
+          })),
+        });
+      }
+      synced++;
+    } catch (e) {
+      errors.push(`GR ${item.po_id}: ${String(e)}`);
+    }
+  }
+
+  return { synced, errors, debug };
+}
+
 export async function syncOSSOrders(): Promise<{ synced: number; errors: string[]; debug: string[] }> {
   const session = await ossLogin();
   const now = new Date();
@@ -401,6 +496,16 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
   if (tomorrowList.length > 0) {
     const unique = [...new Set(tomorrowList)];
     await wxNotify(`🚚 寿司系统：明日 ${unique.length} 笔订单到货提醒`, unique.map(s => `- ${s}`).join("\n"));
+  }
+
+  // Sync GR orders (e.g. NZ King Salmon ASN orders) — stores supplier_po_number as poNumber
+  try {
+    const grResult = await syncGROrders(session);
+    totalSynced += grResult.synced;
+    allErrors.push(...grResult.errors);
+    allDebug.push(...grResult.debug);
+  } catch (e) {
+    allErrors.push(`GR sync failed: ${String(e)}`);
   }
 
   return { synced: totalSynced, errors: allErrors, debug: allDebug };
