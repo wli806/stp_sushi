@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { RefreshCw, UtensilsCrossed, AlertCircle, ExternalLink, X } from "lucide-react";
+import { RefreshCw, UtensilsCrossed, ExternalLink, X } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useLanguage } from "@/components/LanguageProvider";
 import { format } from "date-fns";
@@ -337,22 +337,6 @@ export default function SushiOrdersPage() {
       return ymd && ymd > todayYMD;
     }).length, [orders, todayYMD]);
 
-  const nextWeekNeedOrder = useMemo(() =>
-    orders.filter(o => {
-      if (o.status !== 1 || !o.orderDate) return false;
-      const ymd = parseToYMD(o.orderDate);
-      return ymd && ymd >= weekBounds.nextStart && ymd <= weekBounds.nextEnd;
-    }).length, [orders, weekBounds]);
-
-  const pendingOrders = useMemo(() =>
-    orders
-      .filter(o => {
-        if (o.status !== 1 || !o.orderDate) return false;
-        const ymd = parseToYMD(o.orderDate);
-        return ymd && ymd >= weekBounds.thisStart && ymd <= weekBounds.thisEnd;
-      })
-      .sort((a, b) => (parseToYMD(a.orderDate!) ?? "").localeCompare(parseToYMD(b.orderDate!) ?? "")),
-    [orders, weekBounds]);
 
   const lastSync = orders.length > 0
     ? orders.reduce((a, b) => a.syncedAt > b.syncedAt ? a : b).syncedAt
@@ -383,7 +367,7 @@ export default function SushiOrdersPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-2 md:gap-4 mb-6">
+      <div className="grid grid-cols-2 gap-2 md:gap-4 mb-6">
         <div className="bg-white rounded-xl border border-slate-100 p-3 md:p-4 shadow-sm">
           <p className="text-xs text-slate-400 mb-1 leading-tight">{lang === "en" ? "Today's deliveries" : "今日到货"}</p>
           <p className={`text-xl md:text-2xl font-bold ${todayDeliveries > 0 ? "text-green-600" : "text-slate-300"}`}>{todayDeliveries}</p>
@@ -391,10 +375,6 @@ export default function SushiOrdersPage() {
         <div className="bg-white rounded-xl border border-slate-100 p-3 md:p-4 shadow-sm">
           <p className="text-xs text-slate-400 mb-1 leading-tight">{lang === "en" ? "Upcoming deliveries" : "未到货"}</p>
           <p className={`text-xl md:text-2xl font-bold ${pendingDeliveries > 0 ? "text-blue-600" : "text-slate-300"}`}>{pendingDeliveries}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-100 p-3 md:p-4 shadow-sm">
-          <p className="text-xs text-slate-400 mb-1 leading-tight">{t("orders.stat.pending")}</p>
-          <p className={`text-xl md:text-2xl font-bold ${nextWeekNeedOrder > 0 ? "text-orange-500" : "text-slate-300"}`}>{nextWeekNeedOrder}</p>
         </div>
       </div>
 
@@ -406,33 +386,6 @@ export default function SushiOrdersPage() {
         <div className="bg-white rounded-xl p-12 text-center">
           <UtensilsCrossed size={40} className="mx-auto text-slate-300 mb-3" />
           <p className="text-slate-400">{t("orders.noData")}</p>
-        </div>
-      ) : pendingOrders.length > 0 ? (
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <AlertCircle size={16} className="text-red-500" />
-            <h2 className="font-semibold text-slate-700">{t("orders.section.pending")} <span className="text-red-500">({pendingOrders.length})</span></h2>
-            <span className="hidden sm:inline text-xs text-slate-400">— {t("orders.section.pendingDesc")}</span>
-          </div>
-          <div className="space-y-2">
-            {pendingOrders.map(order => (
-              <a key={order.id} href={ossUrl(order)} target="_blank" rel="noopener noreferrer"
-                className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl px-4 md:px-6 py-4 hover:bg-red-100 transition-colors">
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <span className="font-semibold text-slate-800">{order.supplierName || "Unknown"}</span>
-                    {order.weekNo && <span className="text-xs text-slate-400">W{order.weekNo}</span>}
-                    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">{t("orders.status.pending")}</span>
-                  </div>
-                  <p className="text-slate-400 text-xs">
-                    {order.orderDate && `${t("orders.orderDate")} ${order.orderDate}`}
-                    {order.deliveryDate && ` · ${t("orders.deliveryDate")} ${order.deliveryDate}`}
-                  </p>
-                </div>
-                <ExternalLink size={16} className="text-red-400 flex-shrink-0" />
-              </a>
-            ))}
-          </div>
         </div>
       ) : null}
     </div>
