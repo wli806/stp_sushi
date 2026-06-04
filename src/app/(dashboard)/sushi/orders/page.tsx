@@ -91,7 +91,7 @@ function fmtYMD(ymd: string, lang: string): string {
   return `${parseInt(m)}月${parseInt(d)}日`;
 }
 
-function getTwoWeekDays(): string[] {
+function getThreeWeekDays(): string[] {
   const now = new Date();
   const dow = now.getDay();
   const mondayOffset = dow === 0 ? -6 : 1 - dow;
@@ -99,7 +99,7 @@ function getTwoWeekDays(): string[] {
   thisMonday.setDate(now.getDate() + mondayOffset);
   thisMonday.setHours(0, 0, 0, 0);
   const days: string[] = [];
-  for (let i = 0; i < 14; i++) {
+  for (let i = -7; i < 14; i++) {
     const d = new Date(thisMonday);
     d.setDate(thisMonday.getDate() + i);
     days.push(toLocalYMD(d));
@@ -153,7 +153,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
     return map;
   }, [orders]);
 
-  const twoWeekDays = useMemo(() => getTwoWeekDays(), []);
+  const twoWeekDays = useMemo(() => getThreeWeekDays(), []);
 
   function weekRangeLabel(days: string[]): string {
     const [, m1, d1] = days[0].split("-");
@@ -191,8 +191,8 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
     );
   }
 
-  const weekLabels = lang === "en" ? ["This week", "Next week"] : ["本周", "下周"];
-  const weekStyles = ["text-orange-600 bg-orange-50", "text-slate-500 bg-slate-50"];
+  const weekLabels = lang === "en" ? ["Last week", "This week", "Next week"] : ["上周", "本周", "下周"];
+  const weekStyles = ["text-slate-400 bg-slate-50", "text-orange-600 bg-orange-50", "text-slate-500 bg-slate-50"];
 
   return (
     <>
@@ -206,7 +206,7 @@ function SushiCalendar({ orders }: { orders: SushiOrder[] }) {
             </div>
           ))}
         </div>
-        {[0, 1].map(w => (
+        {[0, 1, 2].map(w => (
           <div key={w}>
             <div className={`px-4 py-1.5 border-b border-slate-100 text-xs font-medium flex items-center gap-2 ${weekStyles[w]}`}>
               <span>{weekLabels[w]}</span>
