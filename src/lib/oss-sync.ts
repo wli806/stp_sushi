@@ -427,10 +427,9 @@ export async function syncOSSOrders(): Promise<{ synced: number; errors: string[
   const year = now.getFullYear();
 
   // First sync: fetch all weeks from week 1 (slow, but only once).
-  // Subsequent syncs: only current-1 through current+4 (fast incremental).
+  // Subsequent syncs: include last week so past deliveries (e.g. Frozen, Stocklink) stay visible.
   const hasHistory = (await prisma.sushiOrder.count()) > 0;
-  // Incremental: only current week onward (past weeks stay in DB as-is)
-  const startWeek = hasHistory ? currentWeekNo : 1;
+  const startWeek = hasHistory ? Math.max(1, currentWeekNo - 1) : 1;
   const endWeek = currentWeekNo + 2;
 
   const allErrors: string[] = [];
