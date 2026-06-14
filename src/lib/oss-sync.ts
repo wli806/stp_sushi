@@ -232,8 +232,7 @@ async function syncWeekOrders(
         const needsDeliveryFetch = !isOffice && order.deliveryDate === null && order.editPath && !existing?.deliveryDate;
 
         const [itemsRes, detailRes] = await Promise.all([
-          // Skip item fetch for existing orders whose status hasn't changed
-          !isVirtualOrder && statusChanged
+          !isVirtualOrder
             ? fetch(`${BASE}/shop/home/getExistingItems`, { method: "POST", headers, body: new URLSearchParams({ headerid: order.id }) })
             : Promise.resolve(null),
           needsDeliveryFetch
@@ -285,18 +284,15 @@ async function syncWeekOrders(
           create: { ossId: order.id, poNumber: order.poNumber, supplierName: order.supplier, status: order.status, poDate: order.poDate || null, deliveryDate: order.deliveryDate, orderDate: order.orderDate || null, weekNo: order.weekNo, year: order.year },
         });
         if (isNew && items.length > 0) newOrders.push(order.supplier);
-        // Only update items when status changed or order is new (avoids unnecessary writes)
-        if (statusChanged || isNew) {
+        if (items.length > 0) {
           await prisma.sushiOrderItem.deleteMany({ where: { orderId: dbOrder.id } });
-          if (items.length > 0) {
-            await prisma.sushiOrderItem.createMany({
-              data: items.map(item => ({
-                orderId: dbOrder.id, ossItemId: String(item.id ?? ""),
-                itemCode: item.item_code ?? "", itemName: item.item_name ?? item.supplier_item_name ?? "",
-                uom: item.uom_name ?? "", quantity: parseFloat(item.qty ?? "0"),
-              })),
-            });
-          }
+          await prisma.sushiOrderItem.createMany({
+            data: items.map(item => ({
+              orderId: dbOrder.id, ossItemId: String(item.id ?? ""),
+              itemCode: item.item_code ?? "", itemName: item.item_name ?? item.supplier_item_name ?? "",
+              uom: item.uom_name ?? "", quantity: parseFloat(item.qty ?? "0"),
+            })),
+          });
         }
         const deliveryYMD = parseDeliveryDate(order.deliveryDate ?? "");
         if (deliveryYMD) {
