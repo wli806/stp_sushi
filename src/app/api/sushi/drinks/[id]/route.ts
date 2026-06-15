@@ -3,11 +3,11 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try { await requireAuth(); } catch { return NextResponse.json({ error: "未登录" }, { status: 401 }); }
   try {
-    await requireAuth();
     const { id } = await params;
-    const { name, quantity, unit, notes } = await request.json() as {
-      name?: string; quantity?: number; unit?: string; notes?: string;
+    const { name, quantity, unit, lowThreshold, notes } = await request.json() as {
+      name?: string; quantity?: number; unit?: string; lowThreshold?: number; notes?: string;
     };
     const item = await prisma.drinkInventoryItem.update({
       where: { id },
@@ -15,22 +15,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         ...(name !== undefined && { name: name.trim() }),
         ...(quantity !== undefined && { quantity: Number(quantity) }),
         ...(unit !== undefined && { unit }),
+        ...(lowThreshold !== undefined && { lowThreshold: Number(lowThreshold) }),
         ...(notes !== undefined && { notes: notes || null }),
       },
     });
     return NextResponse.json(item);
-  } catch {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
-  }
+  } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try { await requireAuth(); } catch { return NextResponse.json({ error: "未登录" }, { status: 401 }); }
   try {
-    await requireAuth();
     const { id } = await params;
     await prisma.drinkInventoryItem.delete({ where: { id } });
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
-  }
+  } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }

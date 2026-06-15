@@ -6,8 +6,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   try { await requireAuth(); } catch { return NextResponse.json({ error: "未登录" }, { status: 401 }); }
   try {
     const { id } = await params;
-    const { name, quantity, unit, notes } = await request.json() as {
-      name?: string; quantity?: number; unit?: string; notes?: string;
+    const { name, quantity, unit, lowThreshold, notes } = await request.json() as {
+      name?: string; quantity?: number; unit?: string; lowThreshold?: number; notes?: string;
     };
     const item = await prisma.frozenInventoryItem.update({
       where: { id },
@@ -15,13 +15,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         ...(name !== undefined && { name: name.trim() }),
         ...(quantity !== undefined && { quantity: Number(quantity) }),
         ...(unit !== undefined && { unit }),
+        ...(lowThreshold !== undefined && { lowThreshold: Number(lowThreshold) }),
         ...(notes !== undefined && { notes: notes || null }),
       },
     });
     return NextResponse.json(item);
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
-  }
+  } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,7 +29,5 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     await prisma.frozenInventoryItem.delete({ where: { id } });
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
-  }
+  } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }

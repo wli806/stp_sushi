@@ -121,43 +121,47 @@ model TrainingChecklist {
 }
 
 model VegeInventoryItem {
-  id        String   @id @default(cuid())
-  name      String
-  quantity  Float    @default(0)
-  unit      String   @default("")
-  notes     String?
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String
+  quantity     Float    @default(0)
+  unit         String   @default("")
+  lowThreshold Float    @default(0)
+  notes        String?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
 }
 
 model PackagingInventoryItem {
-  id        String   @id @default(cuid())
-  name      String
-  quantity  Float    @default(0)
-  unit      String   @default("")
-  notes     String?
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String
+  quantity     Float    @default(0)
+  unit         String   @default("")
+  lowThreshold Float    @default(0)
+  notes        String?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
 }
 
 model FrozenInventoryItem {
-  id        String   @id @default(cuid())
-  name      String
-  quantity  Float    @default(0)
-  unit      String   @default("")
-  notes     String?
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String
+  quantity     Float    @default(0)
+  unit         String   @default("")
+  lowThreshold Float    @default(0)
+  notes        String?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
 }
 
 model DrinkInventoryItem {
-  id        String   @id @default(cuid())
-  name      String
-  quantity  Float    @default(0)
-  unit      String   @default("")
-  notes     String?
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String
+  quantity     Float    @default(0)
+  unit         String   @default("")
+  lowThreshold Float    @default(0)
+  notes        String?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
 }
 
 model Roster {

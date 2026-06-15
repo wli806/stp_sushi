@@ -3,29 +3,23 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
+  try { await requireAuth(); } catch { return NextResponse.json({ error: "未登录" }, { status: 401 }); }
   try {
-    await requireAuth();
-    const items = await prisma.drinkInventoryItem.findMany({
-      orderBy: { name: "asc" },
-    });
+    const items = await prisma.drinkInventoryItem.findMany({ orderBy: { name: "asc" } });
     return NextResponse.json(items);
-  } catch {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
-  }
+  } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }
 
 export async function POST(request: NextRequest) {
+  try { await requireAuth(); } catch { return NextResponse.json({ error: "未登录" }, { status: 401 }); }
   try {
-    await requireAuth();
-    const { name, quantity, unit, notes } = await request.json() as {
-      name: string; quantity: number; unit: string; notes?: string;
+    const { name, quantity, unit, lowThreshold, notes } = await request.json() as {
+      name: string; quantity: number; unit: string; lowThreshold?: number; notes?: string;
     };
     if (!name?.trim()) return NextResponse.json({ error: "名称不能为空" }, { status: 400 });
     const item = await prisma.drinkInventoryItem.create({
-      data: { name: name.trim(), quantity: Number(quantity ?? 0), unit: unit ?? "", notes: notes ?? null },
+      data: { name: name.trim(), quantity: Number(quantity ?? 0), unit: unit ?? "", lowThreshold: Number(lowThreshold ?? 0), notes: notes ?? null },
     });
     return NextResponse.json(item);
-  } catch {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
-  }
+  } catch (e) { return NextResponse.json({ error: String(e) }, { status: 500 }); }
 }
