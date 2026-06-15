@@ -27,6 +27,7 @@ export default function DrinksPage() {
   const [modal, setModal] = useState<{ mode: ModalMode; item?: DrinkItem } | null>(null);
   const [form, setForm] = useState(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [adjusting, setAdjusting] = useState<Record<string, boolean>>({});
 
@@ -50,18 +51,25 @@ export default function DrinksPage() {
 
   async function handleSave() {
     setSaving(true);
-    if (modal?.mode === "add") {
-      await fetch("/api/sushi/drinks", {
-        method: "POST",
+    setSaveError("");
+    try {
+      const url = modal?.mode === "add" ? "/api/sushi/drinks" : `/api/sushi/drinks/${modal?.item?.id}`;
+      const method = modal?.mode === "add" ? "POST" : "PUT";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-    } else if (modal?.item) {
-      await fetch(`/api/sushi/drinks/${modal.item.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSaveError(data.error ?? `保存失败 (${res.status})`);
+        setSaving(false);
+        return;
+      }
+    } catch {
+      setSaveError("网络错误，请重试");
+      setSaving(false);
+      return;
     }
     setSaving(false);
     setModal(null);
@@ -240,8 +248,11 @@ export default function DrinksPage() {
                 />
               </div>
             </div>
+            {saveError && (
+              <div className="px-6 pb-2 text-sm text-red-600">{saveError}</div>
+            )}
             <div className="px-6 py-4 border-t border-slate-100 flex gap-3 justify-end">
-              <button onClick={() => setModal(null)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">取消</button>
+              <button onClick={() => { setModal(null); setSaveError(""); }} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">取消</button>
               <button
                 onClick={handleSave}
                 disabled={saving || !form.name.trim()}
