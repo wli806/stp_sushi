@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Menu,
   X,
+  GlassWater,
   type LucideIcon,
 } from "lucide-react";
 
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
       { href: "/sushi/orders",            labelKey: "sidebar.orders",         icon: ClipboardList },
       { href: "/sushi/po-calendar",       labelKey: "sidebar.poCalendar",     icon: CalendarClock },
       { href: "/sushi/inventory",         labelKey: "sidebar.inventory",      icon: Boxes },
+      { href: "/sushi/drinks",            labelKey: "sidebar.drinks",         icon: GlassWater },
       { href: "/sushi/goods-receiving",   labelKey: "sidebar.goodsReceiving", icon: PackageCheck },
     ],
   },

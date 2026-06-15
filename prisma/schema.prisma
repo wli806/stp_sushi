@@ -119,3 +119,44 @@ model TrainingChecklist {
 
   @@unique([staffId, taskKey])
 }
+
+model DrinkInventoryItem {
+  id        String   @id @default(cuid())
+  name      String
+  quantity  Float    @default(0)
+  unit      String   @default("")
+  notes     String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model Roster {
+  id        String       @id @default(cuid())
+  weekStart String       // "YYYY-MM-DD" — the Monday of the week
+  storeName String       @default("")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  staff     RosterStaff[]
+}
+
+model RosterStaff {
+  id       String        @id @default(cuid())
+  rosterId String
+  name     String
+  order    Int           @default(0)
+  adjHours Float         @default(0)
+  roster   Roster        @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  shifts   RosterShift[]
+}
+
+model RosterShift {
+  id      String      @id @default(cuid())
+  staffId String
+  date    String      // "YYYY-MM-DD"
+  inTime  String      @default("")
+  outTime String      @default("")
+  code    String      @default("")
+  staff   RosterStaff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, date])
+}
