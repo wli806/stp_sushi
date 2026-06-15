@@ -19,6 +19,7 @@ import {
   Menu,
   X,
   GlassWater,
+  Snowflake,
   type LucideIcon,
 } from "lucide-react";
 
@@ -40,6 +41,7 @@ const navItems: NavItem[] = [
       { href: "/sushi/po-calendar",       labelKey: "sidebar.poCalendar",     icon: CalendarClock },
       { href: "/sushi/inventory",         labelKey: "sidebar.inventory",      icon: Boxes },
       { href: "/sushi/drinks",            labelKey: "sidebar.drinks",         icon: GlassWater },
+      { href: "/sushi/frozen",            labelKey: "sidebar.frozen",         icon: Snowflake },
       { href: "/sushi/goods-receiving",   labelKey: "sidebar.goodsReceiving", icon: PackageCheck },
     ],
   },
