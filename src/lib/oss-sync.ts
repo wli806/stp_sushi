@@ -1,5 +1,4 @@
 import { prisma } from "./prisma";
-import { applyOrderToInventory } from "./sushi-inventory-apply";
 import { wxNotify } from "./serverchan";
 
 const BASE = "https://oss.spientsyserv.com";
@@ -212,7 +211,7 @@ async function syncWeekOrders(
   // Pre-load all existing orders for this week in one DB query to avoid N individual findUnique calls
   const existingRows = await prisma.sushiOrder.findMany({
     where: { ossId: { in: allOrders.map(o => o.id) } },
-    select: { id: true, ossId: true, status: true, deliveryDate: true, inventoryApplied: true },
+    select: { id: true, ossId: true, status: true, deliveryDate: true },
   });
   const existingMap = new Map(existingRows.map(r => [r.ossId, r]));
 
@@ -296,12 +295,8 @@ async function syncWeekOrders(
         }
         const deliveryYMD = parseDeliveryDate(order.deliveryDate ?? "");
         if (deliveryYMD) {
-          const todayYMD = now.toISOString().slice(0, 10);
           const tomorrowYMD = new Date(now.getTime() + 86400000).toISOString().slice(0, 10);
-          if (deliveryYMD <= todayYMD && !dbOrder.inventoryApplied) {
-            todayDeliveries.push(order.supplier);
-            try { await applyOrderToInventory(dbOrder.id); } catch { /* 不影响同步 */ }
-          } else if (deliveryYMD === tomorrowYMD) {
+          if (deliveryYMD === tomorrowYMD) {
             tomorrowDeliveries.push(order.supplier);
           }
         }
