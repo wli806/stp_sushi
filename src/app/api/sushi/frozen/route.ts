@@ -5,16 +5,24 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     await requireAuth();
-    const items = await prisma.frozenInventoryItem.findMany({ orderBy: { name: "asc" } });
-    return NextResponse.json(items);
   } catch {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
+  }
+  try {
+    const items = await prisma.frozenInventoryItem.findMany({ orderBy: { name: "asc" } });
+    return NextResponse.json(items);
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     await requireAuth();
+  } catch {
+    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  }
+  try {
     const { name, quantity, unit, notes } = await request.json() as {
       name: string; quantity: number; unit: string; notes?: string;
     };
@@ -23,7 +31,7 @@ export async function POST(request: NextRequest) {
       data: { name: name.trim(), quantity: Number(quantity ?? 0), unit: unit ?? "", notes: notes ?? null },
     });
     return NextResponse.json(item);
-  } catch {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
