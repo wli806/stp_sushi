@@ -20,6 +20,8 @@ import {
   X,
   GlassWater,
   Snowflake,
+  Leaf,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,6 +44,8 @@ const navItems: NavItem[] = [
       { href: "/sushi/inventory",         labelKey: "sidebar.inventory",      icon: Boxes },
       { href: "/sushi/drinks",            labelKey: "sidebar.drinks",         icon: GlassWater },
       { href: "/sushi/frozen",            labelKey: "sidebar.frozen",         icon: Snowflake },
+      { href: "/sushi/vege",             labelKey: "sidebar.vege",           icon: Leaf },
+      { href: "/sushi/packaging",        labelKey: "sidebar.packaging",      icon: Package },
       { href: "/sushi/goods-receiving",   labelKey: "sidebar.goodsReceiving", icon: PackageCheck },
     ],
   },
